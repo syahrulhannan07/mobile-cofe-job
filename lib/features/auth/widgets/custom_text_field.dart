@@ -5,11 +5,15 @@ import '../../../../core/constants/colors.dart';
 class CustomTextField extends StatelessWidget {
   final String label;
   final bool isPassword;
+  final TextEditingController? controller;
+  final TextInputType keyboardType;
 
   const CustomTextField({
     super.key,
     required this.label,
     this.isPassword = false,
+    this.controller,
+    this.keyboardType = TextInputType.text,
   });
 
   @override
@@ -27,9 +31,12 @@ class CustomTextField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+
         // Input Field
         TextField(
+          controller: controller,
           obscureText: isPassword,
+          keyboardType: keyboardType,
           style: const TextStyle(color: AppColors.textMain),
           decoration: InputDecoration(
             isDense: true,
@@ -37,11 +44,15 @@ class CustomTextField extends StatelessWidget {
               vertical: 14,
               horizontal: 16,
             ),
+
             // Border saat tidak fokus
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.inputBorder),
+              borderSide: const BorderSide(
+                color: AppColors.inputBorder,
+              ),
             ),
+
             // Border saat fokus
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -50,14 +61,19 @@ class CustomTextField extends StatelessWidget {
                 width: 1.5,
               ),
             ),
-            // Border saat error (untuk validasi nanti)
+
+            // Border saat error
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Colors.red),
             ),
+
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+              borderSide: const BorderSide(
+                color: Colors.red,
+                width: 1.5,
+              ),
             ),
           ),
         ),
