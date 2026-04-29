@@ -9,18 +9,6 @@ android {
     namespace = "com.example.cofe_job"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
-    flavorDimensions.add("default")
-    productFlavors {
-        create("dev") {
-            dimension = "default"
-            applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "Cofe Job Dev")
-        }
-        create("prod") {
-            dimension = "default"
-            resValue("string", "app_name", "Cofe Job")
-        }
-    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
