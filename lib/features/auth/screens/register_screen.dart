@@ -16,7 +16,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   final AuthService _authService = AuthService();
   bool _isLoading = false;
@@ -45,6 +46,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       nama: name,
       email: email,
       password: password,
+      konfirmasi_password: confirmPassword,
     );
 
     setState(() => _isLoading = false);
@@ -197,7 +199,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const CircularProgressIndicator(color: Colors.white)
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
                               : const Text(
                                   "Daftar",
                                   style: TextStyle(

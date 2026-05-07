@@ -64,7 +64,7 @@ class BerandaScreen extends StatelessWidget {
                 child: Image.asset(
                   'assets/banner_home.png', // <-- Pastikan file ini ada di folder assets
                   width: double.infinity,
-                  height: 200,
+                  height: 170,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     // Fallback jika gambar tidak ditemukan
