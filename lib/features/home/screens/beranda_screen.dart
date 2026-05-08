@@ -1,6 +1,10 @@
 // lib/features/home/screens/beranda_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
+import 'tutorial_screen.dart'; 
+import 'perusahaan_screen.dart'; 
+import 'bantuan_screen.dart'; 
+import 'profile_screen.dart'; // 1. Import halaman profil yang baru dibuat
 
 class BerandaScreen extends StatelessWidget {
   const BerandaScreen({super.key});
@@ -39,18 +43,30 @@ class BerandaScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const Row(
+                  Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.notifications_none_rounded,
                         color: AppColors.textMain,
                         size: 28,
                       ),
-                      SizedBox(width: 12),
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: AppColors.brownLight,
-                        child: Icon(Icons.person, color: AppColors.textMain),
+                      const SizedBox(width: 12),
+                      
+                      // 2. Navigasi ke Profile_screen (Modifikasi di sini)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileScreen(),
+                            ),
+                          );
+                        },
+                        child: const CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppColors.brownLight,
+                          child: Icon(Icons.person, color: AppColors.textMain),
+                        ),
                       ),
                     ],
                   ),
@@ -58,16 +74,15 @@ class BerandaScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // 2. Banner Utama (Menggunakan File Gambar Anda)
+              // 2. Banner Utama
               ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Image.asset(
-                  'assets/banner_home.png', // <-- Pastikan file ini ada di folder assets
+                  'assets/banner_home.png',
                   width: double.infinity,
                   height: 170,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback jika gambar tidak ditemukan
                     return Container(
                       width: double.infinity,
                       height: 160,
@@ -91,9 +106,41 @@ class BerandaScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildMenuIcon(Icons.help_center_rounded, "Tutorial"),
-                  _buildMenuIcon(Icons.business_rounded, "Perusahaan"),
-                  _buildMenuIcon(Icons.mark_as_unread_rounded, "Bantuan"),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const TutorialScreen(),
+                        ),
+                      );
+                    },
+                    child: _buildMenuIcon(Icons.help_center_rounded, "Tutorial"),
+                  ),
+                  
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PerusahaanScreen(),
+                        ),
+                      );
+                    },
+                    child: _buildMenuIcon(Icons.business_rounded, "Perusahaan"),
+                  ),
+                  
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const BantuanScreen(),
+                        ),
+                      );
+                    },
+                    child: _buildMenuIcon(Icons.mark_as_unread_rounded, "Bantuan"),
+                  ),
                 ],
               ),
               const SizedBox(height: 30),
