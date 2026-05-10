@@ -47,18 +47,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
       email: email,
       password: password,
       konfirmasi_password: confirmPassword,
+      peran: "Pelamar",
     );
 
     setState(() => _isLoading = false);
 
     if (result['status'] == true) {
-      _showSnackBar(result['message'], isSuccess: true);
+      _showSnackBar("Registrasi berhasil! Silakan login.", isSuccess: true);
       // Kembali ke halaman login setelah sukses
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) Navigator.pop(context);
       });
     } else {
-      _showSnackBar(result['message']);
+      _showSnackBar(result['message'] ?? "Registrasi gagal");
     }
   }
 
@@ -67,6 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: isSuccess ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

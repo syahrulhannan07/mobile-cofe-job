@@ -1,6 +1,5 @@
-// lib/features/auth/screens/login_screen.dart
-
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/colors.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/auth_service.dart';
@@ -16,19 +15,25 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // 1. Controller untuk mengambil input user
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
-  // 2. Fungsi Handle Login
+  // Menyimpan session login hanya jika peran adalah 'Pelamar'
+  Future<void> _saveLoginSession(Map<String, dynamic> userData) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', true);
+    await prefs.setString('userEmail', userData['email'] ?? '');
+    await prefs.setString('userName', userData['nama_pengguna'] ?? '');
+    await prefs.setString('userRole', userData['peran'] ?? '');
+  }
+
   Future<void> _handleLogin() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
 
-    // Validasi input kosong
     if (email.isEmpty || password.isEmpty) {
       _showMessage("Email dan Password wajib diisi", isError: true);
       return;
@@ -44,16 +49,28 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (result["status"] == true) {
-        // Berikan feedback sukses
-        _showMessage("Login berhasil! Selamat datang", isError: false);
+        // AMBIL DATA USER DARI RESPONSE BACKEND
+        final userData = result["user"]; 
+        final String peran = userData["peran"] ?? "";
 
-        // Pindah ke halaman utama dan hapus history navigasi
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainLayout()),
-        );
+        // VALIDASI AKTOR: Hanya Pelamar yang boleh masuk ke Mobile App
+        if (peran == "Pelamar") {
+          await _saveLoginSession(userData);
+
+          _showMessage("Login berhasil! Selamat datang", isError: false);
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainLayout()),
+          );
+        } else {
+          // Jika aktor adalah Admin_Perusahaan atau Super_Admin
+          _showMessage(
+            "Akses ditolak. Akun Anda terdaftar sebagai $peran. Silakan login melalui Website.", 
+            isError: true
+          );
+        }
       } else {
-        // Tampilkan pesan error dari backend (misal: "Kredensial salah")
         _showMessage(result["message"] ?? "Login gagal", isError: true);
       }
     } catch (e) {
@@ -62,21 +79,19 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // 3. Helper untuk menampilkan pesan (SnackBar)
   void _showMessage(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 4), // Durasi sedikit lebih lama agar pesan terbaca
       ),
     );
   }
 
   @override
   void dispose() {
-    // Membersihkan controller saat widget dihapus dari memory
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -88,7 +103,6 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
         child: Center(
-          // Menambahkan Center agar tampilan lebih seimbang
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -96,8 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20),
-
-                  // Logo Section
                   Center(
                     child: SizedBox(
                       width: 120,
@@ -116,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   const Text(
                     "Selamat Datang di CAFE JOB",
                     textAlign: TextAlign.center,
@@ -127,19 +138,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
                   const Text(
-                    "Masuk dan Temukan Career\nImpian Anda",
+                    "Masuk dan Temukan Career Impian Anda", // Memberi info tambahan di UI
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textMain,
-                      height: 1.3,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textAccent,
                     ),
                   ),
                   const SizedBox(height: 32),
-
-                  // Form Container
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -167,8 +175,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _passwordController,
                         ),
                         const SizedBox(height: 12),
-
-                        // Link Navigasi
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -195,8 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        const ForgotPasswordScreen(),
+                                    builder: (_) => const ForgotPasswordScreen(),
                                   ),
                                 );
                               },
@@ -211,8 +216,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
-
-                        // Tombol Login
                         SizedBox(
                           width: double.infinity,
                           height: 55,
