@@ -1,4 +1,5 @@
 // lib/features/home/screens/beranda_screen.dart
+import 'dart:async'; // Diperlukan untuk Timer
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
@@ -7,7 +8,7 @@ import 'perusahaan_screen.dart';
 import 'bantuan_screen.dart';
 import 'profile_screen.dart';
 import 'lowongan_screen.dart';
-import 'notification_screen.dart'; // 1. Tambahkan import ini
+import 'notification_screen.dart';
 
 class BerandaScreen extends StatefulWidget {
   const BerandaScreen({super.key});
@@ -20,10 +21,49 @@ class _BerandaScreenState extends State<BerandaScreen> {
   String userName = "Memuat...";
   String userEducation = "Pendidikan belum diatur";
 
+  // Controller untuk Auto Scroll Banner
+  final PageController _pageController = PageController(initialPage: 0);
+  int _currentPage = 0;
+  Timer? _timer;
+
+  // Data Banner (Ganti path asset sesuai kebutuhan Anda)
+  final List<String> _bannerImages = [
+    'assets/banner_home1.png',
+    'assets/banner_home2.png',
+    'assets/banner_home3.png',
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _startAutoScroll();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // Fungsi untuk menjalankan scroll otomatis setiap 3 detik
+  void _startAutoScroll() {
+    _timer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
+      if (_currentPage < 2) {
+        _currentPage++;
+      } else {
+        _currentPage = 0;
+      }
+
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -31,7 +71,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
     setState(() {
       userName = prefs.getString("user_name") ?? "User";
       userEducation =
-          prefs.getString("user_education") ?? "S1 Rekayasa Perangkat Lunak";
+          prefs.getString("user_education") ?? "Pendidikan";
     });
   }
 
@@ -73,7 +113,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     ),
                     Row(
                       children: [
-                        // 2. Modifikasi Icon Notifikasi di sini
                         IconButton(
                           icon: const Icon(
                             Icons.notifications_none_rounded,
@@ -90,9 +129,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                             );
                           },
                         ),
-                        const SizedBox(
-                          width: 4,
-                        ), // Disesuaikan sedikit agar pas
+                        const SizedBox(width: 4),
                         GestureDetector(
                           onTap: () => Navigator.push(
                             context,
@@ -116,11 +153,8 @@ class _BerandaScreenState extends State<BerandaScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 2. Banner Utama
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _buildBanner(),
-              ),
+              // 2. Banner Utama (Sudah Dimodifikasi Menjadi Auto-Scroll)
+              _buildBanner(),
               const SizedBox(height: 24),
 
               // 3. Menu Icons
@@ -152,21 +186,16 @@ class _BerandaScreenState extends State<BerandaScreen> {
               ),
               const SizedBox(height: 30),
 
-              // 4. Section Lowongan Terbaru (Horizontal)
+              // 4. Section Lowongan Terbaru
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Lowongan Terbaru",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: AppColors.textMain,
-                      ),
-                    ),
-                  ],
+                child: const Text(
+                  "Lowongan Terbaru",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppColors.textMain,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -196,27 +225,13 @@ class _BerandaScreenState extends State<BerandaScreen> {
                       location: "Jakarta",
                       salary: "Rp 5jt - 8jt",
                     ),
-                    _buildHorizontalJobCard(
-                      logo: Icons.account_balance,
-                      jobTitle: "Finance Manager",
-                      companyName: "Dermayu Beans",
-                      location: "Indramayu",
-                      salary: "Rp 4jt - 6jt",
-                    ),
-                    _buildHorizontalJobCard(
-                      logo: Icons.local_shipping,
-                      jobTitle: "Logistics Lead",
-                      companyName: "Ship Coffee",
-                      location: "Cirebon",
-                      salary: "Rp 4jt - 5jt",
-                    ),
                   ],
                 ),
               ),
 
               const SizedBox(height: 30),
 
-              // 5. Section Perusahaan Terbaru (Vertikal)
+              // 5. Section Perusahaan Terbaru
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -237,38 +252,14 @@ class _BerandaScreenState extends State<BerandaScreen> {
                       logo: Icons.storefront,
                       name: "Indra Coffee Roasters",
                       address: "Jl. Cimanuk No. 12, Indramayu",
-                      desc:
-                          "Penyedia biji kopi terbaik di wilayah Indramayu dengan standar internasional.",
+                      desc: "Penyedia biji kopi terbaik di wilayah Indramayu.",
                     ),
                     _buildVerticalCompanyCard(
                       logo: Icons.apartment,
                       name: "Mangga Dua Tech",
                       address: "Pusat Bisnis Indramayu",
-                      desc:
-                          "Perusahaan software yang fokus pada digitalisasi industri UMKM kopi.",
+                      desc: "Perusahaan software fokus digitalisasi UMKM.",
                     ),
-                    _buildVerticalCompanyCard(
-                      logo: Icons.coffee_maker,
-                      name: "Brewery House",
-                      address: "Jatibarang, Indramayu",
-                      desc:
-                          "Cafe dan tempat pelatihan barista profesional dengan sertifikasi nasional.",
-                    ),
-                    _buildVerticalCompanyCard(
-                      logo: Icons.precision_manufacturing,
-                      name: "Koperasi Petani Kopi",
-                      address: "Kuningan, Jawa Barat",
-                      desc:
-                          "Wadah bagi petani kopi lokal untuk mendistribusikan hasil panen ke kafe modern.",
-                    ),
-                    _buildVerticalCompanyCard(
-                      logo: Icons.precision_manufacturing,
-                      name: "RoastMaster Co.",
-                      address: "Bandung, Jawa Barat",
-                      desc:
-                          "Manufaktur mesin roasting kopi berkualitas tinggi buatan anak bangsa.",
-                    ),
-                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -279,32 +270,48 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
+  // MODIFIKASI: Widget Banner dengan PageView.builder
   Widget _buildBanner() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Image.asset(
-        'assets/banner_home.png',
-        width: double.infinity,
-        height: 170,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: double.infinity,
-          height: 160,
-          decoration: BoxDecoration(
-            color: AppColors.brownDark,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Center(
-            child: Text(
-              "Cofe Job: Temukan Karirmu",
-              style: TextStyle(color: Colors.white),
+    return SizedBox(
+      height: 170,
+      child: PageView.builder(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _currentPage = index;
+          });
+        },
+        itemCount: _bannerImages.length,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                _bannerImages[index],
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.brownDark,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Center(
+                    child: Text(
+                      "Cofe Job Promo ${index + 1}",
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
+  // Widget pendukung lainnya tetap sama (tidak ada perubahan logic)
   Widget _buildMenuButton(
     BuildContext context,
     IconData icon,
