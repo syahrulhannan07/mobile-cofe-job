@@ -1,6 +1,7 @@
 // lib/features/home/screens/detail_lowongan_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
+import 'apply_job_screen.dart'; // Pastikan import file tujuan sudah benar
 
 class DetailLowonganScreen extends StatelessWidget {
   final Map<String, String> lowongan;
@@ -90,9 +91,20 @@ class DetailLowonganScreen extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                // Tombol Lamar
+                                // Tombol Lamar (MODIFIKASI DI SINI)
                                 ElevatedButton(
-                                  onPressed: () {},
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ApplyJobScreen(
+                                          jobTitle:
+                                              lowongan['title'] ??
+                                              "Posisi Pekerjaan",
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF4A3428),
                                     shape: RoundedRectangleBorder(
@@ -117,8 +129,8 @@ class DetailLowonganScreen extends StatelessWidget {
                             Row(
                               children: [
                                 Text(
-                                  "Indra Coffee Roaster",
-                                  style: TextStyle(
+                                  lowongan['company'] ?? "Indra Coffee Roaster",
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textMain,
@@ -150,7 +162,7 @@ class DetailLowonganScreen extends StatelessWidget {
                             _buildInfoRow(
                               Icons.location_on,
                               "Lokasi",
-                              "Karangampel",
+                              lowongan['location'] ?? "Karangampel",
                             ),
                             _buildInfoRow(
                               Icons.work,
@@ -207,9 +219,9 @@ class DetailLowonganScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(color: AppColors.brownLight),
-                  const Text(
-                    "Sebagai Marketing Intern, Anda akan berperan penting dalam menceritakan kisah di balik setiap cangkir kopi kami...",
-                    style: TextStyle(
+                  Text(
+                    "Sebagai ${lowongan['title']}, Anda akan berperan penting dalam menceritakan kisah di balik setiap cangkir kopi kami...",
+                    style: const TextStyle(
                       fontSize: 13,
                       height: 1.5,
                       color: AppColors.textMain,
