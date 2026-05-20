@@ -1,15 +1,24 @@
 // lib/features/home/screens/detail_lowongan_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
-import 'apply_job_screen.dart'; // Pastikan import file tujuan sudah benar
+import 'apply_job_screen.dart';
 
 class DetailLowonganScreen extends StatelessWidget {
-  final Map<String, String> lowongan;
+  // Ubah tipe data dari Map<String, String> menjadi dynamic
+  // agar dapat menerima data berstruktur complex Object/Map hasil API
+  final dynamic lowongan;
 
   const DetailLowonganScreen({super.key, required this.lowongan});
 
   @override
   Widget build(BuildContext context) {
+    // Ekstraksi data relasi perusahaan dari database Cofe Job
+    final perusahaan = lowongan['perusahaan'] ?? {};
+    final String? logoUrl = perusahaan['logo_perusahaan'];
+    final String posisiPekerjaan = lowongan['posisi'] ?? 'Posisi Pekerjaan';
+    final String namaPerusahaan =
+        perusahaan['nama_perusahaan'] ?? 'Perusahaan Cofe Job';
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       body: SingleChildScrollView(
@@ -58,6 +67,7 @@ class DetailLowonganScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
+
                       // Card Profil Perusahaan Atas
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -75,32 +85,44 @@ class DetailLowonganScreen extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Logo
+                                // Logo Perusahaan terintegrasi Network API
                                 Container(
                                   width: 70,
                                   height: 70,
                                   decoration: BoxDecoration(
-                                    color: Colors.black,
+                                    color: Colors.black12,
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(15),
-                                    child: Image.asset(
-                                      'assets/logo_cofe_job.png',
-                                      fit: BoxFit.contain,
-                                    ),
+                                    child: logoUrl != null && logoUrl.isNotEmpty
+                                        ? Image.network(
+                                            logoUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    const Icon(
+                                                      Icons.coffee_rounded,
+                                                      color:
+                                                          AppColors.brownDark,
+                                                      size: 30,
+                                                    ),
+                                          )
+                                        : const Icon(
+                                            Icons.coffee_rounded,
+                                            color: AppColors.brownDark,
+                                            size: 30,
+                                          ),
                                   ),
                                 ),
-                                // Tombol Lamar (MODIFIKASI DI SINI)
+                                // Tombol Lamar membawa parameter dinamis dari posisi pekerjaan
                                 ElevatedButton(
                                   onPressed: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (context) => ApplyJobScreen(
-                                          jobTitle:
-                                              lowongan['title'] ??
-                                              "Posisi Pekerjaan",
+                                          jobTitle: posisiPekerjaan,
                                         ),
                                       ),
                                     );
@@ -128,12 +150,16 @@ class DetailLowonganScreen extends StatelessWidget {
                             const SizedBox(height: 15),
                             Row(
                               children: [
-                                Text(
-                                  lowongan['company'] ?? "Indra Coffee Roaster",
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textMain,
+                                Expanded(
+                                  child: Text(
+                                    namaPerusahaan,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textMain,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 5),
@@ -145,9 +171,12 @@ class DetailLowonganScreen extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Text(
-                              "“Indra Coffee Roasters adalah pemanggang kopi artisan yang berdedikasi di Karangampel, Jawa Barat.”",
-                              style: TextStyle(
+                            Text(
+                              perusahaan['tentang_perusahaan'] ??
+                                  "Perusahaan yang berdedikasi tinggi menciptakan ekosistem kerja inklusif untuk masa depan.",
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontStyle: FontStyle.italic,
                                 color: Colors.grey,
@@ -155,37 +184,19 @@ class DetailLowonganScreen extends StatelessWidget {
                             ),
                             const Divider(height: 25),
                             _buildInfoRow(
-                              Icons.calendar_month,
-                              "Berdiri",
-                              "5 April 2007",
+                              Icons.work_outline_rounded,
+                              "Posisi Lowongan",
+                              posisiPekerjaan,
                             ),
                             _buildInfoRow(
-                              Icons.location_on,
+                              Icons.location_on_outlined,
                               "Lokasi",
-                              lowongan['location'] ?? "Karangampel",
+                              lowongan['lokasi'] ?? "Indramayu",
                             ),
                             _buildInfoRow(
-                              Icons.work,
-                              "Lowongan Aktif",
-                              "4 Lowongan",
-                            ),
-                            const SizedBox(height: 15),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () {},
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brownLight,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                ),
-                                child: const Text(
-                                  "Lihat Profile Perusahaan",
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
+                              Icons.payments_outlined,
+                              "Estimasi Gaji",
+                              lowongan['gaji'] ?? "Gaji Rahasia",
                             ),
                           ],
                         ),
@@ -220,18 +231,16 @@ class DetailLowonganScreen extends StatelessWidget {
                   ),
                   const Divider(color: AppColors.brownLight),
                   Text(
-                    "Sebagai ${lowongan['title']}, Anda akan berperan penting dalam menceritakan kisah di balik setiap cangkir kopi kami...",
+                    lowongan['deskripsi'] ??
+                        "Sebagai $posisiPekerjaan, Anda akan berkontribusi langsung dalam operasional harian dan pengembangan standar mutu kualitas pelayanan di $namaPerusahaan.",
                     style: const TextStyle(
                       fontSize: 13,
                       height: 1.5,
                       color: AppColors.textMain,
                     ),
                   ),
-                  const SizedBox(height: 15),
-                  _buildBulletPoint("Produksi Konten Kreatif"),
-                  _buildBulletPoint("Copywriting"),
-                  _buildBulletPoint("Social Media Management"),
                   const SizedBox(height: 25),
+
                   const Text(
                     "Persyaratan & Kualifikasi",
                     style: TextStyle(
@@ -241,18 +250,33 @@ class DetailLowonganScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(color: AppColors.brownLight),
-                  _buildBulletPoint(
-                    "Pendidikan: Mahasiswa tingkat akhir atau lulusan baru",
-                  ),
-                  _buildBulletPoint(
-                    "Keahlian Teknis: Mahir menggunakan aplikasi editing",
-                  ),
-                  _buildBulletPoint(
-                    "Kreativitas: Memiliki kemampuan storytelling",
-                  ),
-                  _buildBulletPoint(
-                    "Lokasi: Bersedia ditempatkan di Karangampel, Indramayu",
-                  ),
+
+                  // Menampilkan kualifikasi dari string data database secara fleksibel
+                  if (lowongan['kualifikasi'] != null &&
+                      lowongan['kualifikasi'].toString().isNotEmpty)
+                    Text(
+                      lowongan['kualifikasi'],
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                        color: AppColors.textMain,
+                      ),
+                    )
+                  else ...[
+                    // Fallback bullets jika field kualifikasi database kosong
+                    _buildBulletPoint(
+                      "Pendidikan: Minimal SMA/K Sederajat atau Diploma/S1",
+                    ),
+                    _buildBulletPoint(
+                      "Keahlian Teknis: Mampu bekerja dalam tim & komunikatif",
+                    ),
+                    _buildBulletPoint(
+                      "Memiliki antusiasme tinggi di bidang industri ini",
+                    ),
+                    _buildBulletPoint(
+                      "Lokasi penempatan sesuai dengan cabang yang dipilih",
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -269,22 +293,26 @@ class DetailLowonganScreen extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: Colors.orange.shade700),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
                 ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-            ],
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -1,38 +1,117 @@
 // lib/features/home/screens/perusahaan_screen.dart
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../../core/constants/colors.dart';
+import 'detail_perusahaan_screen.dart'; // Import ke halaman detail yang sudah dipisah
 
-class PerusahaanScreen extends StatelessWidget {
+class PerusahaanScreen extends StatefulWidget {
   const PerusahaanScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Data dummy perusahaan
-    final List<Map<String, String>> daftarPerusahaan = [
-      {
-        "nama": "Indra Coffee Roaster",
-        "alamat": "Karangampel, Indramayu",
-        "deskripsiSingkat": "Pemanggang kopi artisan yang berdedikasi tinggi...",
-        "deskripsiLengkap":
-            "Indra Coffee Roasters adalah pemanggang kopi artisan yang berdedikasi di Karangampel, Jawa Barat. Kami fokus pada kualitas biji kopi terbaik dan pengalaman pelanggan yang unik.",
-        "logo": "assets/logo_cofe_job.png", 
-      },
-      {
-        "nama": "Warehouse Cafe",
-        "alamat": "Jakarta Selatan",
-        "deskripsiSingkat": "Tempat nongkrong industrial dengan kopi pilihan...",
-        "deskripsiLengkap":
-            "Warehouse Cafe mengusung konsep industrial modern yang nyaman untuk bekerja maupun bersantai. Kami menyediakan berbagai varian kopi dari seluruh nusantara.",
-        "logo": "assets/logo_cofe_job.png",
-      },
-    ];
+  State<PerusahaanScreen> createState() => _PerusahaanScreenState();
+}
 
+class _PerusahaanScreenState extends State<PerusahaanScreen> {
+  late Future<List<Map<String, dynamic>>> _futurePerusahaan;
+  List<Map<String, dynamic>> _allPerusahaan = [];
+  List<Map<String, dynamic>> _filteredPerusahaan = [];
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _futurePerusahaan = fetchPerusahaan();
+  }
+
+  // ==================== FUNGSI FETCH API DATABASE (ANTI-CORS) ====================
+  Future<List<Map<String, dynamic>>> fetchPerusahaan() async {
+    final String url = 'https://cofe-job.cicd.my.id/api/v1/beranda';
+
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+
+        // Ambil list lowongan dari response data beranda
+        final List<dynamic> lowonganData =
+            responseData['data']['lowongan_terbaru'] ?? [];
+
+        // Menggunakan key String untuk menampung ID (Aman dari benturan tipe data int vs String)
+        final Map<String, Map<String, dynamic>> uniquePerusahaanMap = {};
+
+        for (var item in lowonganData) {
+          var perusahaanData = item['perusahaan'];
+
+          if (perusahaanData != null) {
+            final perusahaan = Map<String, dynamic>.from(perusahaanData);
+            final String idKey = (perusahaan['id'] ?? '').toString();
+
+            if (idKey.isNotEmpty) {
+              uniquePerusahaanMap[idKey] = perusahaan;
+            }
+          }
+        }
+
+        // Konversi Map hasil filter duplikat menjadi bentuk List kembali
+        List<Map<String, dynamic>> perusahaanList = uniquePerusahaanMap.values
+            .toList();
+
+        setState(() {
+          _allPerusahaan = perusahaanList;
+          _filteredPerusahaan = perusahaanList;
+        });
+
+        return perusahaanList;
+      } else {
+        throw Exception(
+          'Gagal memuat data dari server (${response.statusCode})',
+        );
+      }
+    } catch (e) {
+      throw Exception('Gagal terhubung ke database server: $e');
+    }
+  }
+
+  // ==================== FUNGSI FITUR SEARCH ====================
+  void _filterPerusahaan(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredPerusahaan = _allPerusahaan;
+      } else {
+        _filteredPerusahaan = _allPerusahaan
+            .where(
+              (perusahaan) =>
+                  (perusahaan['nama_perusahaan'] ?? '')
+                      .toString()
+                      .toLowerCase()
+                      .contains(query.toLowerCase()) ||
+                  (perusahaan['alamat_perusahaan'] ?? '')
+                      .toString()
+                      .toLowerCase()
+                      .contains(query.toLowerCase()),
+            )
+            .toList();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFDF7F0),
       body: SafeArea(
         child: Column(
           children: [
             const SizedBox(height: 20),
+
             // 1. Header (Tombol Kembali & Judul)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -47,7 +126,7 @@ class PerusahaanScreen extends StatelessWidget {
                       color: Colors.black.withOpacity(0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ],
                 ),
                 child: Stack(
@@ -56,8 +135,10 @@ class PerusahaanScreen extends StatelessWidget {
                     Positioned(
                       left: 10,
                       child: IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded,
-                            color: Color(0xFF635147)),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Color(0xFF635147),
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ),
@@ -74,13 +155,25 @@ class PerusahaanScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            // 2. Search Bar
+
+            // 2. Search Bar Terintegrasi
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
+                controller: _searchController,
+                onChanged: _filterPerusahaan,
                 decoration: InputDecoration(
                   hintText: "Cari Perusahaan...",
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.grey),
+                          onPressed: () {
+                            _searchController.clear();
+                            _filterPerusahaan('');
+                          },
+                        )
+                      : null,
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
@@ -91,15 +184,85 @@ class PerusahaanScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            // 3. Daftar Perusahaan
+
+            // 3. Daftar Perusahaan Menggunakan FutureBuilder
             Expanded(
-              child: ListView.builder(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                itemCount: daftarPerusahaan.length,
-                itemBuilder: (context, index) {
-                  final perusahaan = daftarPerusahaan[index];
-                  return _buildCardPerusahaan(context, perusahaan);
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _futurePerusahaan,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF635147),
+                        ),
+                      ),
+                    );
+                  } else if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 60,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Color(0xFF635147)),
+                            ),
+                            const SizedBox(height: 15),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _futurePerusahaan = fetchPerusahaan();
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.brownLight,
+                              ),
+                              child: const Text(
+                                'Coba Lagi',
+                                style: TextStyle(color: Color(0xFF635147)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  } else if (_filteredPerusahaan.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "Tidak ada perusahaan ditemukan",
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
+                    );
+                  }
+
+                  // Data berhasil diload & dirender
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() {
+                        _futurePerusahaan = fetchPerusahaan();
+                      });
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      itemCount: _filteredPerusahaan.length,
+                      itemBuilder: (context, index) {
+                        final perusahaan = _filteredPerusahaan[index];
+                        return _buildCardPerusahaan(context, perusahaan);
+                      },
+                    ),
+                  );
                 },
               ),
             ),
@@ -109,14 +272,23 @@ class PerusahaanScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCardPerusahaan(BuildContext context, Map<String, String> data) {
+  Widget _buildCardPerusahaan(BuildContext context, Map<String, dynamic> data) {
+    String deskripsi =
+        data['deskripsi_perusahaan'] ??
+        data['deskripsi'] ??
+        'Tidak ada deskripsi.';
+    if (deskripsi.length > 60) {
+      deskripsi = '${deskripsi.substring(0, 60)}...';
+    }
+
+    final String? logoUrl = data['logo_perusahaan'];
+
     return GestureDetector(
       onTap: () {
-        // Navigasi ke halaman detail baru
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => DetailPerusahaanScreen(data: data),
+            builder: (context) => DetailPerusahaanScreen(companyData: data),
           ),
         );
       },
@@ -137,32 +309,52 @@ class PerusahaanScreen extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Logo Perusahaan (Sekarang Menggunakan Image)
+            // Logo Perusahaan
             Container(
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: AppColors.brownLight,
+                color: AppColors.brownLight.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  data['logo']!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.business, color: Color(0xFF635147)),
-                ),
+                child: logoUrl != null && logoUrl.isNotEmpty
+                    ? (logoUrl.startsWith('http')
+                          ? Image.network(
+                              logoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.storefront_rounded,
+                                    color: Color(0xFF635147),
+                                  ),
+                            )
+                          : Image.asset(
+                              logoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.storefront_rounded,
+                                    color: Color(0xFF635147),
+                                  ),
+                            ))
+                    : const Icon(
+                        Icons.storefront_rounded,
+                        color: Color(0xFF635147),
+                        size: 30,
+                      ),
               ),
             ),
             const SizedBox(width: 15),
+
             // Info Perusahaan
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    data['nama']!,
+                    data['nama_perusahaan'] ?? 'Tanpa Nama',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -172,103 +364,33 @@ class PerusahaanScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.location_on,
-                          size: 14, color: Colors.grey),
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 4),
-                      Text(
-                        data['alamat']!,
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      Expanded(
+                        child: Text(
+                          data['alamat_perusahaan'] ?? 'Lokasi tidak diset',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    data['deskripsiSingkat']!,
+                    deskripsi,
                     style: const TextStyle(fontSize: 13, color: Colors.black54),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
-            ),
-            // Ikon panah dihapus sesuai permintaan
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Halaman Detail Baru
-class DetailPerusahaanScreen extends StatelessWidget {
-  final Map<String, String> data;
-  const DetailPerusahaanScreen({super.key, required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFDF7F0),
-      appBar: AppBar(
-        title: Text(data['nama']!,
-            style: const TextStyle(color: Color(0xFF635147))),
-        backgroundColor: AppColors.brownLight,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF635147)),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black12, blurRadius: 10, spreadRadius: 2)
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.asset(data['logo']!, fit: BoxFit.cover),
-                ),
-              ),
-            ),
-            const SizedBox(height: 25),
-            Text(
-              data['nama']!,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF635147),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.location_on,
-                    color: AppColors.brownDark, size: 20),
-                const SizedBox(width: 5),
-                Text(data['alamat']!,
-                    style: const TextStyle(color: Colors.grey, fontSize: 16)),
-              ],
-            ),
-            const Divider(height: 40),
-            const Text(
-              "Tentang Perusahaan",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 15),
-            Text(
-              data['deskripsiLengkap']!,
-              style: const TextStyle(
-                  fontSize: 15, height: 1.6, color: Colors.black87),
             ),
           ],
         ),
