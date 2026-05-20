@@ -1,6 +1,8 @@
 // lib/features/home/screens/beranda_screen.dart
-import 'dart:async'; // Diperlukan untuk Timer
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
 import 'tutorial_screen.dart';
@@ -20,13 +22,15 @@ class BerandaScreen extends StatefulWidget {
 class _BerandaScreenState extends State<BerandaScreen> {
   String userName = "Memuat...";
   String userEducation = "Pendidikan belum diatur";
+  
+  final String baseUrl = "https://cofe-job.cicd.my.id/api/v1";
+  late Future<Map<String, dynamic>> _berandaData;
 
   // Controller untuk Auto Scroll Banner
   final PageController _pageController = PageController(initialPage: 0);
   int _currentPage = 0;
   Timer? _timer;
 
-  // Data Banner (Ganti path asset sesuai kebutuhan Anda)
   final List<String> _bannerImages = [
     'assets/banner_home1.png',
     'assets/banner_home2.png',
@@ -38,6 +42,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
     super.initState();
     _loadUserData();
     _startAutoScroll();
+    _berandaData = fetchBerandaData(); // Ambil data gabungan dari DB saat init
   }
 
   @override
@@ -47,7 +52,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     super.dispose();
   }
 
-  // Fungsi untuk menjalankan scroll otomatis setiap 3 detik
   void _startAutoScroll() {
     _timer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
       if (_currentPage < 2) {
@@ -70,9 +74,86 @@ class _BerandaScreenState extends State<BerandaScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       userName = prefs.getString("user_name") ?? "User";
-      userEducation =
-          prefs.getString("user_education") ?? "Pendidikan";
+      userEducation = prefs.getString("user_education") ?? "Pendidikan belum diatur";
     });
+  }
+
+  // Helper internal yang membersihkan teks dan mengubah nominal ke format singkat (misal: 3000000 -> 3JT)
+  String _prosesFormatAngka(String teksAngka) {
+    // Hapus semua karakter non-angka (seperti Rp, titik, spasi, dll)
+    String cleanString = teksAngka.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanString.isEmpty) return "";
+    
+    int? angkaGaji = int.tryParse(cleanString);
+    if (angkaGaji == null) return teksAngka;
+
+    if (angkaGaji >= 1000000) {
+      double juta = angkaGaji / 1000000;
+      // Jika hasilnya bulat (misal 3.0), jadikan "3", jika desimal (misal 3.5), pertahankan satu angka di belakang koma
+      String hasilJuta = juta % 1 == 0 ? juta.toInt().toString() : juta.toStringAsFixed(1);
+      return "${hasilJuta}JT";
+    } else if (angkaGaji >= 1000) {
+      double ribu = angkaGaji / 1000;
+      String hasilRibu = ribu % 1 == 0 ? ribu.toInt().toString() : ribu.toStringAsFixed(1);
+      return "${hasilRibu}RB";
+    }
+    return angkaGaji.toString();
+  }
+
+  // Fungsi menyingkat nominal gaji dari database (Mendukung int murni, single string, maupun range gaji)
+  String formatGajiSingkat(dynamic gaji) {
+    if (gaji == null) return "Gaji Rahasia";
+    
+    // Pastikan diconvert ke string terlebih dahulu dan dibersihkan dari spasi luar
+    String gajiStr = gaji.toString().trim();
+    if (gajiStr.isEmpty) return "Gaji Rahasia";
+
+    // Cek apakah data berupa range menggunakan tanda hubung '-' atau kata pemisah lainnya
+    if (gajiStr.contains('-')) {
+      List<String> parts = gajiStr.split('-');
+      if (parts.length == 2) {
+        String minGaji = _prosesFormatAngka(parts[0]);
+        String maxGaji = _prosesFormatAngka(parts[1]);
+        if (minGaji.isNotEmpty && maxGaji.isNotEmpty) {
+          return "$minGaji - $maxGaji";
+        }
+      }
+    } else if (gajiStr.toLowerCase().contains('sampai')) {
+      List<String> parts = gajiStr.toLowerCase().split('sampai');
+      if (parts.length == 2) {
+        String minGaji = _prosesFormatAngka(parts[0]);
+        String maxGaji = _prosesFormatAngka(parts[1]);
+        if (minGaji.isNotEmpty && maxGaji.isNotEmpty) {
+          return "$minGaji - $maxGaji";
+        }
+      }
+    }
+
+    // Jika berupa angka single murni/teks biasa
+    String hasilFormat = _prosesFormatAngka(gajiStr);
+    return hasilFormat.isEmpty ? "Gaji Rahasia" : hasilFormat;
+  }
+
+  // Fungsi Tunggal untuk Fetch Data Gabungan Beranda
+  Future<Map<String, dynamic>> fetchBerandaData() async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/beranda"),
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        return jsonResponse['data'] ?? {};
+      } else {
+        throw Exception("Gagal memuat data beranda");
+      }
+    } catch (e) {
+      throw Exception("Kesalahan koneksi: $e");
+    }
   }
 
   @override
@@ -80,197 +161,221 @@ class _BerandaScreenState extends State<BerandaScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Header Profil & Notif
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          userName.toUpperCase(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: AppColors.textMain,
-                          ),
-                        ),
-                        Text(
-                          userEducation,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMain.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.notifications_none_rounded,
-                            color: AppColors.textMain,
-                            size: 28,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const NotificationScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ProfileScreen(),
-                            ),
-                          ),
-                          child: const CircleAvatar(
-                            radius: 20,
-                            backgroundColor: AppColors.brownLight,
-                            child: Icon(
-                              Icons.person,
-                              color: AppColors.textMain,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _berandaData,
+          builder: (context, snapshot) {
+            // State Loading saat aplikasi mengambil data dari database
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.brownDark),
+              );
+            }
 
-              // 2. Banner Utama (Sudah Dimodifikasi Menjadi Auto-Scroll)
-              _buildBanner(),
-              const SizedBox(height: 24),
-
-              // 3. Menu Icons
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildMenuButton(
-                      context,
-                      Icons.help_center_rounded,
-                      "Tutorial",
-                      const TutorialScreen(),
-                    ),
-                    _buildMenuButton(
-                      context,
-                      Icons.business_rounded,
-                      "Perusahaan",
-                      const PerusahaanScreen(),
-                    ),
-                    _buildMenuButton(
-                      context,
-                      Icons.mark_as_unread_rounded,
-                      "Bantuan",
-                      const BantuanScreen(),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // 4. Section Lowongan Terbaru
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: const Text(
-                  "Lowongan Terbaru",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppColors.textMain,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(left: 20, bottom: 10),
-                child: Row(
-                  children: [
-                    _buildHorizontalJobCard(
-                      logo: Icons.coffee,
-                      jobTitle: "Senior Barista",
-                      companyName: "Indra Coffee",
-                      location: "Indramayu",
-                      salary: "Rp 3jt - 4jt",
-                    ),
-                    _buildHorizontalJobCard(
-                      logo: Icons.laptop_mac,
-                      jobTitle: "Mobile Developer",
-                      companyName: "Cofe Job Tech",
-                      location: "Bandung",
-                      salary: "Rp 6jt - 9jt",
-                    ),
-                    _buildHorizontalJobCard(
-                      logo: Icons.design_services,
-                      jobTitle: "UI/UX Designer",
-                      companyName: "Creative Brew",
-                      location: "Jakarta",
-                      salary: "Rp 5jt - 8jt",
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // 5. Section Perusahaan Terbaru
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  "Perusahaan Terbaru",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppColors.textMain,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 15),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+            // State Error jika server mati atau bermasalah
+            if (snapshot.hasError) {
+              return Center(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildVerticalCompanyCard(
-                      logo: Icons.storefront,
-                      name: "Indra Coffee Roasters",
-                      address: "Jl. Cimanuk No. 12, Indramayu",
-                      desc: "Penyedia biji kopi terbaik di wilayah Indramayu.",
+                    const Icon(Icons.wifi_off_rounded, size: 50, color: Colors.grey),
+                    const SizedBox(height: 10),
+                    Text("Gagal terhubung ke database", style: TextStyle(color: Colors.grey[600])),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _berandaData = fetchBerandaData();
+                        });
+                      },
+                      child: const Text("Coba Lagi", style: TextStyle(color: AppColors.brownDark)),
+                    )
+                  ],
+                ),
+              );
+            }
+
+            // Mengambil list data dari snapshot API
+            final data = snapshot.data ?? {};
+            final List lowonganList = data['lowongan_terbaru'] ?? [];
+            final List perusahaanList = data['perusahaan_populer'] ?? [];
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                setState(() {
+                  _berandaData = fetchBerandaData();
+                });
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Header Profil & Notif
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                userName.toUpperCase(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: AppColors.textMain,
+                                ),
+                              ),
+                              Text(
+                                userEducation,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textMain.withOpacity(0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.notifications_none_rounded,
+                                  color: AppColors.textMain,
+                                  size: 28,
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const NotificationScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ProfileScreen(),
+                                  ),
+                                ),
+                                child: const CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: AppColors.brownLight,
+                                  child: Icon(
+                                    Icons.person,
+                                    color: AppColors.textMain,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    _buildVerticalCompanyCard(
-                      logo: Icons.apartment,
-                      name: "Mangga Dua Tech",
-                      address: "Pusat Bisnis Indramayu",
-                      desc: "Perusahaan software fokus digitalisasi UMKM.",
+                    const SizedBox(height: 24),
+
+                    // 2. Banner Utama Auto-Scroll
+                    _buildBanner(),
+                    const SizedBox(height: 24),
+
+                    // 3. Menu Icons
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildMenuButton(context, Icons.help_center_rounded, "Tutorial", const TutorialScreen()),
+                          _buildMenuButton(context, Icons.business_rounded, "Perusahaan", const PerusahaanScreen()),
+                          _buildMenuButton(context, Icons.mark_as_unread_rounded, "Bantuan", const BantuanScreen()),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 30),
+
+                    // 4. Section Lowongan Terbaru
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        "Lowongan Terbaru",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textMain,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    lowonganList.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            child: Text("Belum ada lowongan terbaru.", style: TextStyle(color: Colors.grey)),
+                          )
+                        : SizedBox(
+                            height: 145,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.only(left: 20, right: 4, bottom: 10),
+                              itemCount: lowonganList.length,
+                              itemBuilder: (context, index) {
+                                final item = lowonganList[index];
+                                final perusahaan = item['perusahaan'] ?? {};
+                                return _buildHorizontalJobCard(
+                                  logoUrl: perusahaan['logo_perusahaan'],
+                                  jobTitle: item['posisi'] ?? 'Posisi tidak ditentukan',
+                                  companyName: perusahaan['nama_perusahaan'] ?? 'Perusahaan Kosong',
+                                  location: item['lokasi'] ?? 'Indramayu',
+                                  salary: formatGajiSingkat(item['gaji']),
+                                );
+                              },
+                            ),
+                          ),
+
+                    const SizedBox(height: 24),
+
+                    // 5. Section Perusahaan Terbaru
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        "Perusahaan Terbaru",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textMain,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    perusahaanList.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 20),
+                            child: Text("Belum ada perusahaan terdaftar.", style: TextStyle(color: Colors.grey)),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              children: perusahaanList.map((company) {
+                                return _buildVerticalCompanyCard(
+                                  logoUrl: company['logo_perusahaan'],
+                                  name: company['nama_perusahaan'] ?? 'Tanpa Nama',
+                                  address: company['alamat_perusahaan'] ?? 'Lokasi tidak diset',
+                                  desc: company['deskripsi'] ?? 'Tidak ada deskripsi.',
+                                );
+                              }).toList(),
+                            ),
+                          ),
                   ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  // MODIFIKASI: Widget Banner dengan PageView.builder
   Widget _buildBanner() {
     return SizedBox(
       height: 170,
@@ -311,18 +416,9 @@ class _BerandaScreenState extends State<BerandaScreen> {
     );
   }
 
-  // Widget pendukung lainnya tetap sama (tidak ada perubahan logic)
-  Widget _buildMenuButton(
-    BuildContext context,
-    IconData icon,
-    String label,
-    Widget targetScreen,
-  ) {
+  Widget _buildMenuButton(BuildContext context, IconData icon, String label, Widget targetScreen) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => targetScreen),
-      ),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => targetScreen)),
       child: Column(
         children: [
           Container(
@@ -335,50 +431,66 @@ class _BerandaScreenState extends State<BerandaScreen> {
             child: Icon(icon, size: 35, color: AppColors.brownDark),
           ),
           const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppColors.textMain),
-          ),
+          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMain)),
         ],
       ),
     );
   }
 
   Widget _buildHorizontalJobCard({
-    required IconData logo,
+    required String? logoUrl,
     required String jobTitle,
     required String companyName,
     required String location,
     required String salary,
   }) {
     return Container(
-      width: 260,
+      width: 280,
       margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: AppColors.brownLight.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  color: AppColors.brownLight.withOpacity(0.25),
+                  child: logoUrl != null && logoUrl.isNotEmpty
+                      ? Image.network(
+                          logoUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brownDark),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => 
+                              const Icon(Icons.coffee, color: AppColors.brownDark, size: 22),
+                        )
+                      : const Icon(Icons.coffee, color: AppColors.brownDark, size: 22),
                 ),
-                child: Icon(logo, color: AppColors.brownDark, size: 25),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -393,37 +505,61 @@ class _BerandaScreenState extends State<BerandaScreen> {
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                         color: AppColors.textMain,
+                        letterSpacing: -0.2,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      companyName,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      companyName, 
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 15),
           Row(
             children: [
-              const Icon(
-                Icons.location_on,
-                size: 14,
-                color: AppColors.brownDark,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                location,
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              // Badge Lokasi
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on_rounded, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 2),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        location,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const Spacer(),
-              Text(
-                salary,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.brownDark,
-                  fontWeight: FontWeight.bold,
+              // Badge Gaji
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.brownLight.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  salary == "Gaji Rahasia" ? salary : "Rp $salary",
+                  style: const TextStyle(
+                    fontSize: 11, 
+                    color: AppColors.brownDark, 
+                    fontWeight: FontWeight.bold
+                  ),
                 ),
               ),
             ],
@@ -434,7 +570,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
   }
 
   Widget _buildVerticalCompanyCard({
-    required IconData logo,
+    required String? logoUrl,
     required String name,
     required String address,
     required String desc,
@@ -456,14 +592,31 @@ class _BerandaScreenState extends State<BerandaScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
+          ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: Container(
+              width: 60,
+              height: 60,
               color: AppColors.brownLight.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(15),
+              child: logoUrl != null && logoUrl.isNotEmpty
+                  ? Image.network(
+                      logoUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brownDark),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => 
+                          const Icon(Icons.storefront, color: AppColors.brownDark, size: 30),
+                    )
+                  : const Icon(Icons.storefront, color: AppColors.brownDark, size: 30),
             ),
-            child: Icon(logo, color: AppColors.brownDark, size: 30),
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -472,30 +625,19 @@ class _BerandaScreenState extends State<BerandaScreen> {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: AppColors.textMain,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textMain),
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.map_outlined,
-                      size: 12,
-                      color: Colors.grey,
-                    ),
+                    const Icon(Icons.map_outlined, size: 12, color: Colors.grey),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         address,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
-                        ),
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ),
                   ],
@@ -505,11 +647,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                   desc,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMain.withOpacity(0.7),
-                    height: 1.4,
-                  ),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMain.withOpacity(0.7), height: 1.4),
                 ),
               ],
             ),
