@@ -24,9 +24,11 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
     _futurePerusahaan = fetchPerusahaan();
   }
 
-  // ==================== FUNGSI FETCH API DATABASE (ANTI-CORS) ====================
+  // ==================== FUNGSI FETCH API (FORCE ALL DATA) ====================
   Future<List<Map<String, dynamic>>> fetchPerusahaan() async {
-    final String url = 'https://cofe-job.cicd.my.id/api/v1/beranda';
+    // Menambahkan parameter per_page=100 untuk memaksa backend mengirimkan semua data sekaligus
+    final String url =
+        'https://cofe-job.cicd.my.id/api/v1/perusahaan?per_page=100';
 
     try {
       final response = await http.get(
@@ -40,29 +42,19 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
 
-        // Ambil list lowongan dari response data beranda
-        final List<dynamic> lowonganData =
-            responseData['data']['lowongan_terbaru'] ?? [];
+        // Karena Laravel menggunakan API Resource + Pagination,
+        // data array aslinya dibungkus di dalam data['data'] atau langsung di responseData['data']
+        dynamic rawData = responseData['data'];
+        List<dynamic> dataList = [];
 
-        // Menggunakan key String untuk menampung ID (Aman dari benturan tipe data int vs String)
-        final Map<String, Map<String, dynamic>> uniquePerusahaanMap = {};
-
-        for (var item in lowonganData) {
-          var perusahaanData = item['perusahaan'];
-
-          if (perusahaanData != null) {
-            final perusahaan = Map<String, dynamic>.from(perusahaanData);
-            final String idKey = (perusahaan['id'] ?? '').toString();
-
-            if (idKey.isNotEmpty) {
-              uniquePerusahaanMap[idKey] = perusahaan;
-            }
-          }
+        if (rawData is Map && rawData['data'] != null) {
+          dataList = rawData['data'];
+        } else if (rawData is List) {
+          dataList = rawData;
         }
 
-        // Konversi Map hasil filter duplikat menjadi bentuk List kembali
-        List<Map<String, dynamic>> perusahaanList = uniquePerusahaanMap.values
-            .toList();
+        List<Map<String, dynamic>> perusahaanList =
+            List<Map<String, dynamic>>.from(dataList);
 
         setState(() {
           _allPerusahaan = perusahaanList;
@@ -244,7 +236,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                     );
                   }
 
-                  // Data berhasil diload & dirender
+                  // Data berhasil diload & dirender penuh
                   return RefreshIndicator(
                     onRefresh: () async {
                       setState(() {

@@ -13,13 +13,14 @@ class LowonganScreen extends StatefulWidget {
 }
 
 class _LowonganScreenState extends State<LowonganScreen> {
-  final String baseUrl = "https://cofe-job.cicd.my.id/api/v1";
-  
+  final String baseUrl =
+      "https://cofe-job.cicd.my.id/api/v1/lowongan?per_page=100";
+
   List<dynamic> _allLowongan = []; // Data asli dari API
   List<dynamic> _filteredLowongan = []; // Data setelah difilter search bar
   bool _isLoading = true;
   String _errorMessage = "";
-  
+
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -34,7 +35,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
     super.dispose();
   }
 
-  // Fungsi mengambil data lowongan langsung dari endpoint beranda
+  // ==================== FUNGSI FETCH ALL DATA LOWONGAN ====================
   Future<void> _fetchLowonganData() async {
     setState(() {
       _isLoading = true;
@@ -43,7 +44,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse("$baseUrl/beranda"),
+        Uri.parse(baseUrl),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
@@ -52,16 +53,25 @@ class _LowonganScreenState extends State<LowonganScreen> {
 
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        final List lowonganData = jsonResponse['data']['lowongan_terbaru'] ?? [];
-        
+
+        dynamic rawData = jsonResponse['data'];
+        List<dynamic> lowonganData = [];
+
+        if (rawData is Map && rawData['data'] != null) {
+          lowonganData = rawData['data'];
+        } else if (rawData is List) {
+          lowonganData = rawData;
+        }
+
         setState(() {
           _allLowongan = lowonganData;
-          _filteredLowongan = lowonganData; // Inisialisasi awal
+          _filteredLowongan = lowonganData;
           _isLoading = false;
         });
       } else {
         setState(() {
-          _errorMessage = "Gagal memuat data dari server";
+          _errorMessage =
+              "Gagal memuat data dari server (${response.statusCode})";
           _isLoading = false;
         });
       }
@@ -73,7 +83,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
     }
   }
 
-  // Fungsi filter pencarian lowongan berdasarkan posisi atau nama perusahaan
+  // ==================== FUNGSI FILTER SEARCH BAR ====================
   void _filterSearch(String query) {
     setState(() {
       if (query.isEmpty) {
@@ -81,57 +91,14 @@ class _LowonganScreenState extends State<LowonganScreen> {
       } else {
         _filteredLowongan = _allLowongan.where((item) {
           final posisi = (item['posisi'] ?? '').toString().toLowerCase();
-          final perusahaan = (item['perusahaan']?['nama_perusahaan'] ?? '').toString().toLowerCase();
-          return posisi.contains(query.toLowerCase()) || perusahaan.contains(query.toLowerCase());
+          final perusahaan = (item['perusahaan']?['nama_perusahaan'] ?? '')
+              .toString()
+              .toLowerCase();
+          return posisi.contains(query.toLowerCase()) ||
+              perusahaan.contains(query.toLowerCase());
         }).toList();
       }
     });
-  }
-
-  // Helper pembersih string angka nominal gaji
-  String _prosesFormatAngka(String teksAngka) {
-    String cleanString = teksAngka.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanString.isEmpty) return "";
-    
-    int? angkaGaji = int.tryParse(cleanString);
-    if (angkaGaji == null) return teksAngka;
-
-    if (angkaGaji >= 1000000) {
-      double juta = angkaGaji / 1000000;
-      String hasilJuta = juta % 1 == 0 ? juta.toInt().toString() : juta.toStringAsFixed(1);
-      return "${hasilJuta}JT";
-    } else if (angkaGaji >= 1000) {
-      double ribu = angkaGaji / 1000;
-      String hasilRibu = ribu % 1 == 0 ? ribu.toInt().toString() : ribu.toStringAsFixed(1);
-      return "${hasilRibu}RB";
-    }
-    return angkaGaji.toString();
-  }
-
-  // Fungsi utama pemformat range gaji singkat
-  String formatGajiSingkat(dynamic gaji) {
-    if (gaji == null) return "Gaji Rahasia";
-    String gajiStr = gaji.toString().trim();
-    if (gajiStr.isEmpty) return "Gaji Rahasia";
-
-    if (gajiStr.contains('-')) {
-      List<String> parts = gajiStr.split('-');
-      if (parts.length == 2) {
-        String minGaji = _prosesFormatAngka(parts[0]);
-        String maxGaji = _prosesFormatAngka(parts[1]);
-        if (minGaji.isNotEmpty && maxGaji.isNotEmpty) return "$minGaji - $maxGaji";
-      }
-    } else if (gajiStr.toLowerCase().contains('sampai')) {
-      List<String> parts = gajiStr.toLowerCase().split('sampai');
-      if (parts.length == 2) {
-        String minGaji = _prosesFormatAngka(parts[0]);
-        String maxGaji = _prosesFormatAngka(parts[1]);
-        if (minGaji.isNotEmpty && maxGaji.isNotEmpty) return "$minGaji - $maxGaji";
-      }
-    }
-
-    String hasilFormat = _prosesFormatAngka(gajiStr);
-    return hasilFormat.isEmpty ? "Gaji Rahasia" : hasilFormat;
   }
 
   @override
@@ -142,8 +109,8 @@ class _LowonganScreenState extends State<LowonganScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-            
-            // 1. Header "Lowongan" dengan tombol Back opsional jika halaman ini dipush
+
+            // 1. Header Halaman
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -163,7 +130,11 @@ class _LowonganScreenState extends State<LowonganScreen> {
                         child: const CircleAvatar(
                           backgroundColor: Colors.white,
                           radius: 16,
-                          child: Icon(Icons.arrow_back_rounded, size: 18, color: AppColors.textMain),
+                          child: Icon(
+                            Icons.arrow_back_rounded,
+                            size: 18,
+                            color: AppColors.textMain,
+                          ),
                         ),
                       ),
                     ),
@@ -184,7 +155,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
             ),
             const SizedBox(height: 20),
 
-            // 2. Search Bar Terintegrasi
+            // 2. Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -202,7 +173,11 @@ class _LowonganScreenState extends State<LowonganScreen> {
                   ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, color: AppColors.textMain, size: 20),
+                          icon: const Icon(
+                            Icons.clear_rounded,
+                            color: AppColors.textMain,
+                            size: 20,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             _filterSearch("");
@@ -231,17 +206,14 @@ class _LowonganScreenState extends State<LowonganScreen> {
             ),
             const SizedBox(height: 20),
 
-            // 3. Area Konten Utama (Loading / Error / List Dinamis)
-            Expanded(
-              child: _buildMainContent(),
-            ),
+            // 3. Area Konten Utama List View
+            Expanded(child: _buildMainContent()),
           ],
         ),
       ),
     );
   }
 
-  // Router Widget Konten Utama untuk mempermudah pengecekan state
   Widget _buildMainContent() {
     if (_isLoading) {
       return const Center(
@@ -259,8 +231,14 @@ class _LowonganScreenState extends State<LowonganScreen> {
             Text(_errorMessage, style: TextStyle(color: Colors.grey[600])),
             TextButton(
               onPressed: _fetchLowonganData,
-              child: const Text("Coba Lagi", style: TextStyle(color: AppColors.brownDark, fontWeight: FontWeight.bold)),
-            )
+              child: const Text(
+                "Coba Lagi",
+                style: TextStyle(
+                  color: AppColors.brownDark,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ],
         ),
       );
@@ -272,7 +250,12 @@ class _LowonganScreenState extends State<LowonganScreen> {
         child: ListView(
           children: const [
             SizedBox(height: 100),
-            Center(child: Text("Tidak ada lowongan ditemukan.", style: TextStyle(color: Colors.grey))),
+            Center(
+              child: Text(
+                "Tidak ada lowongan aktif ditemukan.",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
           ],
         ),
       );
@@ -288,7 +271,10 @@ class _LowonganScreenState extends State<LowonganScreen> {
           final item = _filteredLowongan[index];
           final perusahaan = item['perusahaan'] ?? {};
           final String? logoUrl = perusahaan['logo_perusahaan'];
-          final String formatGaji = formatGajiSingkat(item['gaji']);
+
+          // MODIFIKASI: Langsung mengambil string dari database tanpa helper format rupiah
+          final String gaji =
+              item['gaji']?.toString() ?? "Gaji tidak dicantumkan";
 
           return GestureDetector(
             onTap: () {
@@ -302,7 +288,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFFDF7F0), // Krem muda bawaan UI awal
+                color: const Color(0xFFFDF7F0),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: AppColors.cardOutline.withOpacity(0.5),
@@ -319,7 +305,6 @@ class _LowonganScreenState extends State<LowonganScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Bagian Kiri: Teks Informasi Lowongan
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,12 +327,12 @@ class _LowonganScreenState extends State<LowonganScreen> {
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.grey,
-                            fontWeight: FontWeight.w500
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          formatGaji == "Gaji Rahasia" ? formatGaji : "Rp $formatGaji",
+                          gaji,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -355,7 +340,6 @@ class _LowonganScreenState extends State<LowonganScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // Baris Tanggal / Keterangan Tambahan jika ada
                         Row(
                           children: [
                             const Icon(
@@ -366,7 +350,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                item['updated_at'] != null 
+                                item['updated_at'] != null
                                     ? "Diperbarui: ${item['updated_at'].toString().substring(0, 10)}"
                                     : "Aktif",
                                 style: const TextStyle(
@@ -378,7 +362,6 @@ class _LowonganScreenState extends State<LowonganScreen> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        // Baris Lokasi
                         Row(
                           children: [
                             const Icon(
@@ -404,8 +387,6 @@ class _LowonganScreenState extends State<LowonganScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  
-                  // Bagian Kanan: Logo Perusahaan dari Network API (Fallback ke default Icon jika kosong)
                   Container(
                     width: 60,
                     height: 60,
@@ -419,20 +400,32 @@ class _LowonganScreenState extends State<LowonganScreen> {
                           ? Image.network(
                               logoUrl,
                               fit: BoxFit.cover,
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(
-                                  child: SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brownDark),
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return const Center(
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.brownDark,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.coffee_rounded,
+                                    color: AppColors.brownDark,
+                                    size: 26,
                                   ),
-                                );
-                              },
-                              errorBuilder: (context, error, stackTrace) => 
-                                  const Icon(Icons.coffee_rounded, color: AppColors.brownDark, size: 26),
                             )
-                          : const Icon(Icons.coffee_rounded, color: AppColors.brownDark, size: 26),
+                          : const Icon(
+                              Icons.coffee_rounded,
+                              color: AppColors.brownDark,
+                              size: 26,
+                            ),
                     ),
                   ),
                 ],
