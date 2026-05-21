@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -135,19 +136,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
           setState(() {
             _namaController.text = profile['nama_lengkap']?.toString() ?? '';
             _ttlController.text = profile['tanggal_lahir']?.toString() ?? '';
-            _genderController.text = profile['jenis_kelamin']?.toString() ?? '';
+
+            String genderVal = profile['jenis_kelamin']?.toString() ?? '';
+            if (genderVal == 'L' || genderVal.toLowerCase() == 'laki-laki') {
+              _genderController.text = 'Laki-laki';
+            } else if (genderVal == 'P' ||
+                genderVal.toLowerCase() == 'perempuan') {
+              _genderController.text = 'Perempuan';
+            } else {
+              _genderController.text = '';
+            }
+
             _phoneController.text = profile['nomor_telepon']?.toString() ?? '';
             _alamatController.text = profile['alamat']?.toString() ?? '';
             _tentangSayaController.text =
                 profile['tentang_saya']?.toString() ?? '';
             _currentPhotoUrl = profile['foto_profil'];
 
-            // Clear form lama jika ada sebelum mengisi dari DB
             _pendidikanForms.clear();
             _skillForms.clear();
             _pengalamanForms.clear();
 
-            // 1. Parsing list Pendidikan dari DB
             if (profile['pendidikan'] != null &&
                 profile['pendidikan'] is List) {
               for (var item in profile['pendidikan']) {
@@ -161,7 +170,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
             }
 
-            // 2. Parsing list Skill dari DB
             var skillData = profile['skills'] ?? profile['skill'];
             if (skillData != null && skillData is List) {
               for (var item in skillData) {
@@ -173,7 +181,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
             }
 
-            // 3. Parsing list Pengalaman Kerja dari DB
             if (profile['pengalaman_kerja'] != null &&
                 profile['pengalaman_kerja'] is List) {
               for (var item in profile['pengalaman_kerja']) {
@@ -226,7 +233,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ..fields['alamat'] = _alamatController.text
         ..fields['tentang_saya'] = _tentangSayaController.text;
 
-      // Konversi list objek form dinamis menjadi JSON String agar bisa diterima oleh API Backend Laravel
       List<Map<String, String>> pendidikanData = _pendidikanForms
           .map(
             (f) => {
@@ -299,6 +305,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // Helper untuk memanggil Date Picker Kalender
+  Future<void> _selectDate(
+    BuildContext context,
+    TextEditingController controller,
+  ) async {
+    DateTime initialDate = DateTime.now();
+    if (controller.text.isNotEmpty) {
+      try {
+        initialDate = DateFormat('yyyy-MM-dd').parse(controller.text);
+      } catch (_) {
+        initialDate = DateTime.now();
+      }
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1950),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF635147),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        controller.text = DateFormat('yyyy-MM-dd').format(picked);
+      });
+    }
   }
 
   @override
@@ -413,28 +458,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 30),
 
                           // Form Biodata Utama
-                          _buildInputField(
+                          _buildTextField(
                             "Nama Lengkap",
                             "Masukkan nama lengkap",
                             _namaController,
                           ),
-                          _buildInputField(
-                            "Tempat, tanggal lahir",
-                            "Contoh: Indramayu, 12-10-2000",
+
+                          // Form Tanggal Lahir (Menggunakan Input Kalender)
+                          _buildDateField(
+                            "Tanggal Lahir",
+                            "Pilih tanggal lahir",
                             _ttlController,
                           ),
-                          _buildInputField(
+
+                          // Form Jenis Kelamin (Menggunakan Dropdown)
+                          _buildDropdownField(
                             "Jenis Kelamin",
-                            "Laki-laki / Perempuan",
                             _genderController,
+                            ["Laki-laki", "Perempuan"],
                           ),
-                          _buildInputField(
+
+                          _buildTextField(
                             "Nomor Telepon",
                             "08xxxxxxxxxx",
                             _phoneController,
                             keyboardType: TextInputType.phone,
                           ),
-                          _buildInputField(
+                          _buildTextField(
                             "Alamat",
                             "Alamat lengkap saat ini",
                             _alamatController,
@@ -477,20 +527,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           Row(
                                             children: [
                                               Expanded(
-                                                child: _buildSimpleField(
+                                                child: _buildSimpleDateField(
                                                   "Tahun Mulai",
                                                   _pendidikanForms[index]['tahun_mulai']!,
-                                                  keyboardType:
-                                                      TextInputType.datetime,
                                                 ),
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
-                                                child: _buildSimpleField(
+                                                child: _buildSimpleDateField(
                                                   "Tahun Selesai",
                                                   _pendidikanForms[index]['tahun_selesai']!,
-                                                  keyboardType:
-                                                      TextInputType.datetime,
                                                 ),
                                               ),
                                             ],
@@ -572,20 +618,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           Row(
                                             children: [
                                               Expanded(
-                                                child: _buildSimpleField(
+                                                child: _buildSimpleDateField(
                                                   "Tanggal Mulai",
                                                   _pengalamanForms[index]['tanggal_mulai']!,
-                                                  keyboardType:
-                                                      TextInputType.datetime,
                                                 ),
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
-                                                child: _buildSimpleField(
+                                                child: _buildSimpleDateField(
                                                   "Tanggal Selesai",
                                                   _pengalamanForms[index]['tanggal_selesai']!,
-                                                  keyboardType:
-                                                      TextInputType.datetime,
                                                 ),
                                               ),
                                             ],
@@ -681,13 +723,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           title,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 17,
             color: Color(0xFF635147),
           ),
         ),
         TextButton.icon(
           onPressed: onAdd,
-          icon: const Icon(Icons.add_circle_outline, color: Color(0xFF635147)),
+          icon: const Icon(
+            Icons.add_circle_outline,
+            color: Color(0xFF635147),
+            size: 20,
+          ),
           label: const Text(
             "Tambah",
             style: TextStyle(
@@ -702,12 +748,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildEmptyState(String msg) {
     return Center(
-      child: Text(
-        msg,
-        style: TextStyle(
-          color: Colors.grey[500],
-          fontStyle: FontStyle.italic,
-          fontSize: 14,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Text(
+          msg,
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontStyle: FontStyle.italic,
+            fontSize: 13,
+          ),
         ),
       ),
     );
@@ -724,18 +773,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.brownLight.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(color: AppColors.brownLight.withOpacity(0.4)),
       ),
       child: Stack(
         children: [
-          Padding(padding: const EdgeInsets.only(top: 20), child: child),
+          Padding(padding: const EdgeInsets.only(top: 25), child: child),
           Positioned(
             right: 0,
             top: 0,
             child: GestureDetector(
               onTap: onRemove,
               child: const Icon(
-                Icons.cancel,
+                Icons.delete_outline_rounded,
                 color: Colors.redAccent,
                 size: 22,
               ),
@@ -744,10 +800,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Positioned(
             left: 0,
             top: 0,
-            child: Text(
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF635147).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                "Data #${index + 1}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  color: Color(0xFF635147),
+                ),
               ),
             ),
           ),
@@ -756,16 +821,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSimpleField(
+  Widget _buildTextField(
+    String label,
     String hint,
     TextEditingController controller, {
     TextInputType keyboardType = TextInputType.text,
   }) {
     return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              hintText: hint,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 15,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateField(
+    String label,
+    String hint,
+    TextEditingController controller,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            readOnly: true,
+            onTap: () => _selectDate(context, controller),
+            decoration: InputDecoration(
+              hintText: hint,
+              suffixIcon: const Icon(
+                Icons.calendar_month_rounded,
+                color: Color(0xFF635147),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 15,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownField(
+    String label,
+    TextEditingController controller,
+    List<String> items,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            value: controller.text.isEmpty ? null : controller.text,
+            items: items.map((String val) {
+              return DropdownMenuItem<String>(value: val, child: Text(val));
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                controller.text = value ?? '';
+              });
+            },
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 15,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleField(String hint, TextEditingController controller) {
+    return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextField(
         controller: controller,
-        keyboardType: keyboardType,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           labelText: hint,
@@ -780,44 +978,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInputField(
-    String label,
-    String hint,
-    TextEditingController controller, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.black,
+  Widget _buildSimpleDateField(String hint, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: controller,
+        readOnly: true,
+        onTap: () => _selectDate(context, controller),
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          labelText: hint,
+          suffixIcon: const Icon(
+            Icons.calendar_month_rounded,
+            size: 18,
+            color: Color(0xFF635147),
           ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-            filled: true,
-            fillColor: AppColors.brownLight.withOpacity(0.3),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 15,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: BorderSide.none,
-            ),
+          labelStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
           ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        const SizedBox(height: 20),
-      ],
+      ),
     );
   }
 }
