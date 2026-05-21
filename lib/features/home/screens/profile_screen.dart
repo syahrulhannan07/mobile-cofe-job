@@ -137,21 +137,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _namaController.text = profile['nama_lengkap']?.toString() ?? '';
             _ttlController.text = profile['tanggal_lahir']?.toString() ?? '';
 
-            String genderVal = profile['jenis_kelamin']?.toString() ?? '';
-            if (genderVal == 'L' || genderVal.toLowerCase() == 'laki-laki') {
+            // 🌟 SINKRONISASI JENIS KELAMIN: Membaca variasi output string dari Laravel
+            String genderVal =
+                profile['jenis_kelamin']?.toString().toLowerCase() ?? '';
+            if (genderVal == 'l' || genderVal == 'laki-laki') {
               _genderController.text = 'Laki-laki';
-            } else if (genderVal == 'P' ||
-                genderVal.toLowerCase() == 'perempuan') {
+            } else if (genderVal == 'p' || genderVal == 'perempuan') {
               _genderController.text = 'Perempuan';
             } else {
-              _genderController.text = '';
+              _genderController.text =
+                  'Laki-laki'; // Default fallback agar tidak kosong
             }
 
             _phoneController.text = profile['nomor_telepon']?.toString() ?? '';
             _alamatController.text = profile['alamat']?.toString() ?? '';
             _tentangSayaController.text =
                 profile['tentang_saya']?.toString() ?? '';
-            _currentPhotoUrl = profile['foto_profil'];
+
+            // 🌟 SINKRONISASI FOTO PROFIL: Menggabungkan path relatif database dengan domain server utama
+            String? rawPhotoUrl = profile['foto_profil']?.toString();
+            if (rawPhotoUrl != null && rawPhotoUrl.isNotEmpty) {
+              if (rawPhotoUrl.startsWith('http')) {
+                _currentPhotoUrl = rawPhotoUrl;
+              } else {
+                // Menangani jika kembalian berupa 'storage/...' atau '/storage/...'
+                String cleanPath = rawPhotoUrl.startsWith('/')
+                    ? rawPhotoUrl.substring(1)
+                    : rawPhotoUrl;
+                _currentPhotoUrl = 'https://cofe-job.cicd.my.id/$cleanPath';
+              }
+            } else {
+              _currentPhotoUrl = null;
+            }
 
             _pendidikanForms.clear();
             _skillForms.clear();
@@ -206,6 +223,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- POP-UP DIALOG SUKSES ---
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.rectangle,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20.0,
+                  offset: const Offset(0.0, 10.0),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 85,
+                  height: 85,
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.green,
+                      size: 55,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  "Profil Diperbarui",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2D3748),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Data riwayat pendidikan, skill kompetensi, dan pengalaman kerja Anda telah berhasil disimpan ke database.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF635147),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      "Selesai",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // --- SIMPAN & UPDATE PROFIL KE API ---
   Future<void> _updateProfile() async {
     setState(() => _isLoading = true);
@@ -228,12 +342,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         })
         ..fields['nama_lengkap'] = _namaController.text
         ..fields['tanggal_lahir'] = _ttlController.text
-        ..fields['jenis_kelamin'] = _genderController.text
+        // 🌟 FIX UTAMA VALiDATION: Mengirim string kecil utuh 'laki-laki' atau 'perempuan' agar lolos validasi Laravel
+        ..fields['jenis_kelamin'] =
+            _genderController.text.toLowerCase() == 'perempuan'
+            ? 'perempuan'
+            : 'laki-laki'
         ..fields['nomor_telepon'] = _phoneController.text
         ..fields['alamat'] = _alamatController.text
         ..fields['tentang_saya'] = _tentangSayaController.text;
 
+      // Filter & Mapping Data Pendidikan
       List<Map<String, String>> pendidikanData = _pendidikanForms
+          .where((f) => f['institusi']!.text.isNotEmpty)
           .map(
             (f) => {
               'institusi': f['institusi']!.text,
@@ -246,7 +366,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .toList();
       request.fields['pendidikan'] = json.encode(pendidikanData);
 
+      // Filter & Mapping Data Skill (Key database backend: 'skills')
       List<Map<String, String>> skillData = _skillForms
+          .where((f) => f['nama_skill']!.text.isNotEmpty)
           .map(
             (f) => {
               'nama_skill': f['nama_skill']!.text,
@@ -254,9 +376,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           )
           .toList();
-      request.fields['skill'] = json.encode(skillData);
+      request.fields['skills'] = json.encode(skillData);
 
+      // Filter & Mapping Data Pengalaman Kerja
       List<Map<String, String>> pengalamanData = _pengalamanForms
+          .where((f) => f['nama_perusahaan']!.text.isNotEmpty)
           .map(
             (f) => {
               'nama_perusahaan': f['nama_perusahaan']!.text,
@@ -279,8 +403,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        _showSnackBar("Profil berhasil diperbarui!");
-        _fetchProfileData();
+        _showSuccessDialog();
+        _fetchProfileData(); // Reload data segar dari database
       } else {
         final errorData = json.decode(response.body);
         _showSnackBar(errorData['message'] ?? "Gagal memperbarui profil.");
@@ -307,7 +431,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  // Helper untuk memanggil Date Picker Kalender
   Future<void> _selectDate(
     BuildContext context,
     TextEditingController controller,
@@ -359,7 +482,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : Column(
                 children: [
                   const SizedBox(height: 20),
-                  // Header
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
@@ -408,7 +530,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Avatar Foto Profil
                           Center(
                             child: Stack(
                               children: [
@@ -457,27 +578,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 30),
 
-                          // Form Biodata Utama
                           _buildTextField(
                             "Nama Lengkap",
                             "Masukkan nama lengkap",
                             _namaController,
                           ),
-
-                          // Form Tanggal Lahir (Menggunakan Input Kalender)
                           _buildDateField(
                             "Tanggal Lahir",
                             "Pilih tanggal lahir",
                             _ttlController,
                           ),
-
-                          // Form Jenis Kelamin (Menggunakan Dropdown)
                           _buildDropdownField(
                             "Jenis Kelamin",
                             _genderController,
                             ["Laki-laki", "Perempuan"],
                           ),
-
                           _buildTextField(
                             "Nomor Telepon",
                             "08xxxxxxxxxx",
@@ -492,7 +607,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
-                          // --- SECTION DINAMIS PENDIDIKAN ---
                           _buildSectionHeader(
                             "Riwayat Pendidikan",
                             () => _addPendidikanForm(),
@@ -549,7 +663,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
-                          // --- SECTION DINAMIS SKILL ---
                           _buildSectionHeader(
                             "Keahlian / Skill",
                             () => _addSkillForm(),
@@ -585,7 +698,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
-                          // --- SECTION DINAMIS PENGALAMAN KERJA ---
                           _buildSectionHeader(
                             "Pengalaman Kerja",
                             () => _addPengalamanForm(),
@@ -644,7 +756,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
-                          // Tentang Saya
                           const Text(
                             "Tentang Saya",
                             style: TextStyle(
@@ -671,7 +782,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const SizedBox(height: 40),
 
-                          // Tombol Simpan Perubahan
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -714,7 +824,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // --- WIDGET HELPER UI ---
-
   Widget _buildSectionHeader(String title, VoidCallback onAdd) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
