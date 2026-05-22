@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/network/api_config.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -121,7 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       final response = await http.get(
-        Uri.parse('https://cofe-job.cicd.my.id/api/v1/pelamar/profil'),
+        Uri.parse(ApiConfig.profile),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -332,9 +333,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
-      final uri = Uri.parse(
-        'https://cofe-job.cicd.my.id/api/v1/pelamar/profil/update',
-      );
+      final uri = Uri.parse(ApiConfig.updateProfile);
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll({
           'Authorization': 'Bearer $token',

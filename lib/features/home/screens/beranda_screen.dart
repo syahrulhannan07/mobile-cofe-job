@@ -130,7 +130,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      "Gagal terhubung ke database",
+                      "Gagal terhubung ke internet",
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                     TextButton(

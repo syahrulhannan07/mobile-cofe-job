@@ -20,6 +20,17 @@ class ApiConfig {
   // Fitur Perusahaan
   static const String perusahaan = '$baseUrl/perusahaan?per_page=100';
 
+  // Fitur Lamaran
+  static const String mulaiLamaran = '$baseUrl/lamaran/mulai';
+
+  // Fungsi penolong untuk endpoint bertipe dinamis ID
+  static String uploadDokumen(int idLamaran) =>
+      '$baseUrl/lamaran/$idLamaran/dokumen';
+  static String simpanJawaban(int idLamaran) =>
+      '$baseUrl/lamaran/$idLamaran/jawaban';
+  static String kirimLamaran(int idLamaran) =>
+      '$baseUrl/lamaran/$idLamaran/kirim';
+
   // Fitur Profil
   static const String profile = '$baseUrl/pelamar/profil';
   static const String updateProfile = '$baseUrl/pelamar/profil/update';

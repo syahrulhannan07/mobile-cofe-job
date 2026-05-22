@@ -1,13 +1,22 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/network/api_config.dart';
 
 class ApplyJobScreen extends StatefulWidget {
+  final String jobId;
   final String jobTitle;
 
-  const ApplyJobScreen({super.key, required this.jobTitle});
+  const ApplyJobScreen({
+    super.key,
+    required this.jobId,
+    required this.jobTitle,
+  });
 
   @override
   State<ApplyJobScreen> createState() => _ApplyJobScreenState();
@@ -16,22 +25,30 @@ class ApplyJobScreen extends StatefulWidget {
 class _ApplyJobScreenState extends State<ApplyJobScreen>
     with SingleTickerProviderStateMixin {
   int currentStep = 1;
+  bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _flyAnimation;
 
-  // --- DATA STATE TAHAP 1 (Dokumen) ---
+  // --- DATA STATE TAHAP 1 (Dokumen Berkas) ---
+  File? cvFile;
+  File? ijazahFile;
+  File? suratLamaranFile;
+  File? sertifikatFile;
+
   String? cvFileName;
   String? ijazahFileName;
   String? suratLamaranFileName;
+  String? sertifikatFileName;
 
-  // --- DATA STATE TAHAP 2 (Pertanyaan) ---
+  // --- DATA STATE TAHAP 2 (Pertanyaan Deskriptif) ---
   final TextEditingController _gajiController = TextEditingController();
   final TextEditingController _kualifikasiController = TextEditingController();
   final TextEditingController _pengalamanController = TextEditingController();
 
-  // --- DATA STATE TAHAP 3 (Profile) ---
+  // --- DATA STATE TAHAP 3 (Profil Sinkronisasi DB) ---
   File? _profileImage;
+  String? _networkProfileImageUrl;
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _ttlController = TextEditingController();
   final TextEditingController _alamatController = TextEditingController();
@@ -39,6 +56,8 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   @override
   void initState() {
     super.initState();
+    _loadExistingProfileData();
+
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -75,23 +94,78 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     super.dispose();
   }
 
-  // Fungsi Pilih File Tahap 1
+  // Sinkronisasi data profil pelamar yang sudah pernah diisi sebelumnya
+  Future<void> _loadExistingProfileData() async {
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString("token");
+
+      // Coba ambil dari SharedPreferences lokal terlebih dahulu untuk kecepatan render
+      String? localName = prefs.getString("user_name");
+      if (localName != null) _namaController.text = localName;
+
+      // Ambil data terbaru langsung dari backend database profile (/v1/pelamar/profil)
+      final response = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/pelamar/profil"),
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final resData = jsonDecode(response.body);
+        var pelamar = resData['data'];
+        if (pelamar != null) {
+          setState(() {
+            _namaController.text =
+                pelamar['nama_lengkap'] ??
+                pelamar['nama_pengguna'] ??
+                _namaController.text;
+            _ttlController.text = pelamar['tempat_tanggal_lahir'] ?? '';
+            _alamatController.text = pelamar['alamat'] ?? '';
+            if (pelamar['foto_profil'] != null) {
+              _networkProfileImageUrl = pelamar['foto_profil'];
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Gagal sinkronisasi data profil: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Pengambilan Dokumen Tahap 1
   Future<void> _pickFile(String type) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'png'],
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     );
 
-    if (result != null) {
+    if (result != null && result.files.single.path != null) {
       setState(() {
-        if (type == 'cv') cvFileName = result.files.single.name;
-        if (type == 'ijazah') ijazahFileName = result.files.single.name;
-        if (type == 'lamaran') suratLamaranFileName = result.files.single.name;
+        File pickedFile = File(result.files.single.path!);
+        if (type == 'cv') {
+          cvFile = pickedFile;
+          cvFileName = result.files.single.name;
+        } else if (type == 'ijazah') {
+          ijazahFile = pickedFile;
+          ijazahFileName = result.files.single.name;
+        } else if (type == 'lamaran') {
+          suratLamaranFile = pickedFile;
+          suratLamaranFileName = result.files.single.name;
+        } else if (type == 'sertifikat') {
+          sertifikatFile = pickedFile;
+          sertifikatFileName = result.files.single.name;
+        }
       });
     }
   }
 
-  // Fungsi Pilih Foto Tahap 3
+  // Pengambilan Foto Pengguna Tahap 3
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
@@ -103,7 +177,34 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     }
   }
 
+  // Validasi berpindah ke halaman berikutnya
   void _nextStep() {
+    if (currentStep == 1) {
+      if (cvFile == null || ijazahFile == null || suratLamaranFile == null) {
+        _showValidationError(
+          "Harap lengkapi semua dokumen wajib (CV, Ijazah, & Surat Lamaran)!",
+        );
+        return;
+      }
+    } else if (currentStep == 2) {
+      if (_gajiController.text.trim().isEmpty ||
+          _kualifikasiController.text.trim().isEmpty ||
+          _pengalamanController.text.trim().isEmpty) {
+        _showValidationError("Semua pertanyaan perusahaan wajib diisi!");
+        return;
+      }
+    } else if (currentStep == 3) {
+      if (_namaController.text.trim().isEmpty ||
+          _ttlController.text.trim().isEmpty ||
+          _alamatController.text.trim().isEmpty) {
+        _showValidationError("Data profile tidak boleh ada yang kosong!");
+        return;
+      }
+    } else if (currentStep == 4) {
+      _submitFormLamaran();
+      return;
+    }
+
     if (currentStep < 5) {
       setState(() => currentStep++);
       if (currentStep == 5) {
@@ -115,6 +216,189 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   void _prevStep() {
     if (currentStep > 1) {
       setState(() => currentStep--);
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  void _showValidationError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // --- PROSES SUBMIT TRANSACTION MULTI-STEP SESUAI ROUTES/API.PHP LARAVEL ---
+  Future<void> _submitFormLamaran() async {
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString("token");
+
+      // ==========================================
+      // KELOMPOK 1: MULAI LAMARAN (POST /v1/lamaran/mulai)
+      // ==========================================
+      var uriMulai = Uri.parse("${ApiConfig.baseUrl}/lamaran/mulai");
+      var responseMulai = await http.post(
+        uriMulai,
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: {"id_lowongan": widget.jobId},
+      );
+
+      if (responseMulai.statusCode != 200 && responseMulai.statusCode != 201) {
+        final err = jsonDecode(responseMulai.body);
+        _showValidationError(
+          err['message'] ?? "Gagal menginisialisasi lamaran.",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final dataMulai = jsonDecode(responseMulai.body);
+      // Mendapatkan ID Lamaran yang di-generate backend (menyesuaikan format draf respon bungkus Laravel kamu)
+      dynamic idLamaranRaw = dataMulai['data'] != null
+          ? dataMulai['data']['id']
+          : dataMulai['id'];
+      if (idLamaranRaw == null) {
+        _showValidationError(
+          "Format respon server tidak sesuai (ID Lamaran Kosong).",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+      String idLamaran = idLamaranRaw.toString();
+
+      // ==========================================
+      // KELOMPOK 2: SIMPAN JAWABAN PERTANYAAN (POST /v1/lamaran/{id}/jawaban)
+      // ==========================================
+      var uriJawaban = Uri.parse(
+        "${ApiConfig.baseUrl}/lamaran/$idLamaran/jawaban",
+      );
+      var responseJawaban = await http.post(
+        uriJawaban,
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "gaji_diinginkan": _gajiController.text,
+          "kualifikasi": _kualifikasiController.text,
+          "pengalaman": _pengalamanController.text,
+        }),
+      );
+
+      if (responseJawaban.statusCode != 200 &&
+          responseJawaban.statusCode != 201) {
+        final err = jsonDecode(responseJawaban.body);
+        _showValidationError(
+          err['message'] ?? "Gagal menyimpan jawaban kuisioner.",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Opsional: Perbarui Profile Utama Terlebih Dahulu seandainya ada perubahan data profile pelamar
+      var uriUpdateProfil = Uri.parse(
+        "${ApiConfig.baseUrl}/pelamar/profil/update",
+      );
+      var profilRequest = http.MultipartRequest('POST', uriUpdateProfil);
+      profilRequest.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+      profilRequest.fields['nama_lengkap'] = _namaController.text;
+      profilRequest.fields['tempat_tanggal_lahir'] = _ttlController.text;
+      profilRequest.fields['alamat'] = _alamatController.text;
+      if (_profileImage != null) {
+        profilRequest.files.add(
+          await http.MultipartFile.fromPath('foto_profil', _profileImage!.path),
+        );
+      }
+      await profilRequest.send();
+
+      // ==========================================
+      // KELOMPOK 3: UPLOAD DOKUMEN BERKAS (POST /v1/lamaran/{id}/dokumen)
+      // ==========================================
+      var uriDokumen = Uri.parse(
+        "${ApiConfig.baseUrl}/lamaran/$idLamaran/dokumen",
+      );
+      var docRequest = http.MultipartRequest('POST', uriDokumen);
+      docRequest.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      if (cvFile != null) {
+        docRequest.files.add(
+          await http.MultipartFile.fromPath('cv', cvFile!.path),
+        );
+      }
+      if (ijazahFile != null) {
+        docRequest.files.add(
+          await http.MultipartFile.fromPath('ijazah', ijazahFile!.path),
+        );
+      }
+      if (suratLamaranFile != null) {
+        docRequest.files.add(
+          await http.MultipartFile.fromPath(
+            'surat_lamaran',
+            suratLamaranFile!.path,
+          ),
+        );
+      }
+      if (sertifikatFile != null) {
+        docRequest.files.add(
+          await http.MultipartFile.fromPath('sertifikat', sertifikatFile!.path),
+        );
+      }
+
+      var docStreamedRes = await docRequest.send();
+      var docResponse = await http.Response.fromStream(docStreamedRes);
+
+      if (docResponse.statusCode != 200 && docResponse.statusCode != 201) {
+        final err = jsonDecode(docResponse.body);
+        _showValidationError(
+          err['message'] ?? "Gagal mengunggah file dokumen pelamar.",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // ==========================================
+      // KELOMPOK 4: FINALISASI/KIRIM (POST /v1/lamaran/{id}/kirim)
+      // ==========================================
+      var uriKirim = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/kirim");
+      var responseKirim = await http.post(
+        uriKirim,
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
+
+      if (responseKirim.statusCode == 200 || responseKirim.statusCode == 201) {
+        setState(() => currentStep = 5);
+        _animationController.forward();
+      } else {
+        final errorData = jsonDecode(responseKirim.body);
+        _showValidationError(
+          errorData['message'] ??
+              "Gagal menyelesaikan pengiriman berkas lamaran.",
+        );
+      }
+    } catch (e) {
+      _showValidationError(
+        "Terjadi kesalahan sistem atau jaringan internet: $e",
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -122,21 +406,32 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   Widget build(BuildContext context) {
     if (currentStep == 5) return _buildSuccessScreen();
 
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            _buildStepper(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 25),
-                child: _buildCurrentStepContent(),
-              ),
-            ),
-            _buildBottomButtons(),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _prevStep();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.scaffoldBackground,
+        body: SafeArea(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFF0B85E)),
+                )
+              : Column(
+                  children: [
+                    _buildHeader(context),
+                    _buildStepper(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 25),
+                        child: _buildCurrentStepContent(),
+                      ),
+                    ),
+                    _buildBottomButtons(),
+                  ],
+                ),
         ),
       ),
     );
@@ -173,24 +468,24 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         const SizedBox(height: 25),
         _buildUploadCard(
           Icons.description_rounded,
-          "Curriculum Vitae (CV)",
+          "Curriculum Vitae (CV) *Wajib",
           cvFileName ?? "PDF max 2MB",
           () => _pickFile('cv'),
-          isUploaded: cvFileName != null,
+          isUploaded: cvFile != null,
         ),
         _buildUploadCard(
           Icons.school_rounded,
-          "Ijazah Terakhir",
+          "Ijazah Terakhir *Wajib",
           ijazahFileName ?? "PDF atau JPG max 5MB",
           () => _pickFile('ijazah'),
-          isUploaded: ijazahFileName != null,
+          isUploaded: ijazahFile != null,
         ),
         _buildUploadCard(
           Icons.mail_rounded,
-          "Surat Lamaran",
+          "Surat Lamaran *Wajib",
           suratLamaranFileName ?? "PDF max 2MB",
           () => _pickFile('lamaran'),
-          isUploaded: suratLamaranFileName != null,
+          isUploaded: suratLamaranFile != null,
         ),
         const SizedBox(height: 10),
         _buildSupportingDocSection(),
@@ -236,6 +531,16 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   }
 
   Widget _buildStep3Profile() {
+    ImageProvider profileImageProvider = const NetworkImage(
+      'https://via.placeholder.com/150',
+    );
+    if (_profileImage != null) {
+      profileImageProvider = FileImage(_profileImage!);
+    } else if (_networkProfileImageUrl != null &&
+        _networkProfileImageUrl!.isNotEmpty) {
+      profileImageProvider = NetworkImage(_networkProfileImageUrl!);
+    }
+
     return Column(
       children: [
         const SizedBox(height: 20),
@@ -247,10 +552,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: Colors.grey.shade300,
-                  backgroundImage: _profileImage != null
-                      ? FileImage(_profileImage!)
-                      : const NetworkImage('https://via.placeholder.com/150')
-                            as ImageProvider,
+                  backgroundImage: profileImageProvider,
                 ),
                 Positioned(
                   bottom: 0,
@@ -275,17 +577,17 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         const SizedBox(height: 25),
         _buildInputField(
           "NAMA LENGKAP",
-          "Masukkan nama",
+          "Masukkan nama lengkap",
           controller: _namaController,
         ),
         _buildInputField(
           "TEMPAT, TANGGAL LAHIR",
-          "Contoh: Jakarta, 12 Mei 1995",
+          "Contoh: Indramayu, 12 Mei 2003",
           controller: _ttlController,
         ),
         _buildInputField(
           "ALAMAT LENGKAP",
-          "Jl. Kedai Kopi No. 8, Jakarta Selatan",
+          "Jl. Lohbener Lama No. 08, Indramayu",
           isTextArea: true,
           controller: _alamatController,
         ),
@@ -295,12 +597,22 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   }
 
   Widget _buildStep4Review() {
+    ImageProvider reviewImageProvider = const NetworkImage(
+      'https://via.placeholder.com/150',
+    );
+    if (_profileImage != null) {
+      reviewImageProvider = FileImage(_profileImage!);
+    } else if (_networkProfileImageUrl != null &&
+        _networkProfileImageUrl!.isNotEmpty) {
+      reviewImageProvider = NetworkImage(_networkProfileImageUrl!);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
         const Text(
-          "Harap periksa ringkasan seluruh kelengkapan data lamaran.",
+          "Harap periksa kembali ringkasan seluruh kelengkapan data lamaran Anda sebelum dikirim.",
           style: TextStyle(
             fontSize: 14,
             color: AppColors.textMain,
@@ -309,8 +621,12 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         ),
         const SizedBox(height: 25),
         const Text(
-          "Profil Saya",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          "Profil Pelamar",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Color(0xFF422E26),
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -322,13 +638,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundImage: _profileImage != null
-                    ? FileImage(_profileImage!)
-                    : const NetworkImage('https://via.placeholder.com/150')
-                          as ImageProvider,
-              ),
+              CircleAvatar(radius: 30, backgroundImage: reviewImageProvider),
               const SizedBox(width: 15),
               Expanded(
                 child: Column(
@@ -340,9 +650,10 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
                           : _namaController.text,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 15,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       _ttlController.text,
                       style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -359,16 +670,28 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         ),
         const SizedBox(height: 20),
         const Text(
-          "Jawaban Pertanyaan",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          "Tanggapan Pertanyaan",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Color(0xFF422E26),
+          ),
         ),
         const SizedBox(height: 10),
-        _buildReviewCard("Gaji yang diinginkan:", _gajiController.text),
-        _buildReviewCard("Kualifikasi:", _kualifikasiController.text),
+        _buildReviewCard("Gaji Bulanan Yang Diinginkan:", _gajiController.text),
+        _buildReviewCard(
+          "Kompetensi & Kualifikasi:",
+          _kualifikasiController.text,
+        ),
+        _buildReviewCard("Pengalaman Kerja:", _pengalamanController.text),
         const SizedBox(height: 20),
         const Text(
-          "Dokumen Terlampir",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          "Dokumen Pendukung Terlampir",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Color(0xFF422E26),
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -379,12 +702,20 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
           ),
           child: Column(
             children: [
-              if (cvFileName != null)
-                _buildFileReviewItem(cvFileName!, "Curriculum Vitae"),
-              if (ijazahFileName != null)
-                _buildFileReviewItem(ijazahFileName!, "Ijazah"),
-              if (suratLamaranFileName != null)
-                _buildFileReviewItem(suratLamaranFileName!, "Surat Lamaran"),
+              if (cvFile != null)
+                _buildFileReviewItem(cvFileName!, "Curriculum Vitae (CV)"),
+              if (ijazahFile != null)
+                _buildFileReviewItem(ijazahFileName!, "Ijazah Kelulusan"),
+              if (suratLamaranFile != null)
+                _buildFileReviewItem(
+                  suratLamaranFileName!,
+                  "Surat Lamaran Kerja",
+                ),
+              if (sertifikatFile != null)
+                _buildFileReviewItem(
+                  sertifikatFileName!,
+                  "Sertifikat Pendukung",
+                ),
             ],
           ),
         ),
@@ -392,8 +723,6 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       ],
     );
   }
-
-  // --- WIDGET HELPERS (MODIFIED) ---
 
   Widget _buildUploadCard(
     IconData icon,
@@ -409,7 +738,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         color: const Color(0xFFF9F7F2),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: isUploaded ? Colors.green.shade200 : Colors.grey.shade300,
+          color: isUploaded ? Colors.green.shade300 : Colors.grey.shade300,
         ),
       ),
       child: Row(
@@ -422,7 +751,10 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 Text(
                   subtitle,
@@ -441,6 +773,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
             ),
             child: Text(
               isUploaded ? "Ganti" : "Pilih",
@@ -556,7 +889,6 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     );
   }
 
-  // --- TETAP (Header, Stepper, Success Screen, etc.) ---
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -646,41 +978,51 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   }
 
   Widget _buildSupportingDocSection() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF422E26),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Sertifikat & Portofolio",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: () => _pickFile('sertifikat'),
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: const Color(0xFF422E26),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Sertifikat & Portofolio (Opsional)",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                Text(
-                  "Tambahkan dokumen pendukungmu.",
-                  style: TextStyle(color: Colors.white60, fontSize: 11),
-                ),
-              ],
+                  Text(
+                    sertifikatFileName ?? "Tambahkan dokumen pendukungmu.",
+                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF0B85E),
-              shape: BoxShape.circle,
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: sertifikatFile != null
+                    ? Colors.green
+                    : const Color(0xFFF0B85E),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                sertifikatFile != null ? Icons.check : Icons.add,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
-            child: const Icon(Icons.add, color: Colors.white, size: 20),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -765,7 +1107,9 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
             ),
             const SizedBox(height: 40),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                Navigator.pop(context);
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFDF2E2),
                 foregroundColor: const Color(0xFF422E26),

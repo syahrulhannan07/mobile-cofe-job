@@ -122,6 +122,8 @@ class DetailLowonganScreen extends StatelessWidget {
                                       context,
                                       MaterialPageRoute(
                                         builder: (context) => ApplyJobScreen(
+                                          jobId:
+                                              lowongan['id']?.toString() ?? '',
                                           jobTitle: posisiPekerjaan,
                                         ),
                                       ),
