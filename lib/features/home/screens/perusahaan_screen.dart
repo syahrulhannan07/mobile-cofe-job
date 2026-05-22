@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/colors.dart';
-import 'detail_perusahaan_screen.dart'; // Import ke halaman detail yang sudah dipisah
+import 'detail_perusahaan_screen.dart';
+import '../../../core/network/api_config.dart';
 
 class PerusahaanScreen extends StatefulWidget {
   const PerusahaanScreen({super.key});
@@ -27,12 +28,10 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
   // ==================== FUNGSI FETCH API (FORCE ALL DATA) ====================
   Future<List<Map<String, dynamic>>> fetchPerusahaan() async {
     // Menambahkan parameter per_page=100 untuk memaksa backend mengirimkan semua data sekaligus
-    final String url =
-        'https://cofe-job.cicd.my.id/api/v1/perusahaan?per_page=100';
 
     try {
       final response = await http.get(
-        Uri.parse(url),
+        Uri.parse(ApiConfig.perusahaan),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",

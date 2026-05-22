@@ -12,6 +12,7 @@ import 'profile_screen.dart';
 import 'notification_screen.dart';
 import 'detail_lowongan_screen.dart';
 import 'detail_perusahaan_screen.dart';
+import '../../../core/network/api_config.dart';
 
 class BerandaScreen extends StatefulWidget {
   const BerandaScreen({super.key});
@@ -24,7 +25,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
   String userName = "Memuat...";
   String userEducation = "Pendidikan belum diatur";
 
-  final String baseUrl = "https://cofe-job.cicd.my.id/api/v1";
   late Future<Map<String, dynamic>> _berandaData;
 
   // Controller untuk Auto Scroll Banner
@@ -84,7 +84,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
   Future<Map<String, dynamic>> fetchBerandaData() async {
     try {
       final response = await http.get(
-        Uri.parse("$baseUrl/beranda"),
+        Uri.parse(ApiConfig.beranda),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",

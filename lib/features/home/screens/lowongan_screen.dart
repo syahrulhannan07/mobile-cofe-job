@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/colors.dart';
 import 'detail_lowongan_screen.dart';
+import '../../../core/network/api_config.dart';
 
 class LowonganScreen extends StatefulWidget {
   const LowonganScreen({super.key});
@@ -13,9 +14,6 @@ class LowonganScreen extends StatefulWidget {
 }
 
 class _LowonganScreenState extends State<LowonganScreen> {
-  final String baseUrl =
-      "https://cofe-job.cicd.my.id/api/v1/lowongan?per_page=100";
-
   List<dynamic> _allLowongan = []; // Data asli dari API
   List<dynamic> _filteredLowongan = []; // Data setelah difilter search bar
   bool _isLoading = true;
@@ -44,7 +42,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse(baseUrl),
+        Uri.parse(ApiConfig.lowongan),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",

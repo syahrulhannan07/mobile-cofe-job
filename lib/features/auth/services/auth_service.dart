@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/network/api_config.dart';
 
 class AuthService {
-  final String baseUrl = "https://cofe-job.cicd.my.id/api/v1";
-
   // ================= LOGIN =================
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse("$baseUrl/auth/login"),
+        Uri.parse(ApiConfig.login),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
@@ -82,7 +81,7 @@ class AuthService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse("$baseUrl/auth/daftar-pelamar"),
+        Uri.parse(ApiConfig.registerPelamar),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",

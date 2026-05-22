@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../../core/network/api_config.dart';
 
 class PengaturanScreen extends StatefulWidget {
   const PengaturanScreen({super.key});
@@ -263,7 +264,7 @@ class _UbahEmailScreenState extends State<UbahEmailScreen> {
       final token = prefs.getString('token') ?? '';
 
       final response = await http.post(
-        Uri.parse("https://cofe-job.cicd.my.id/api/v1/pelamar/profil/update"),
+        Uri.parse(ApiConfig.updateProfile),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
@@ -452,9 +453,7 @@ class _UbahPasswordScreenState extends State<UbahPasswordScreen> {
       final token = prefs.getString('token') ?? '';
 
       final response = await http.post(
-        Uri.parse(
-          "https://cofe-job.cicd.my.id/api/v1/pelamar/profil/update-password",
-        ),
+        Uri.parse(ApiConfig.updatePassword),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
