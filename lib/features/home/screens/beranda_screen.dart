@@ -102,6 +102,32 @@ class _BerandaScreenState extends State<BerandaScreen> {
     }
   }
 
+  /// Helper untuk mengubah path relatif dari DB menjadi Full URL yang melewati folder /storage/
+  String? _formatImageUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.isEmpty) return null;
+
+    // Jika dari database ternyata sudah berupa link penuh, langsung kembalikan
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+
+    try {
+      // Ekstrak base domain URL dari ApiConfig.beranda secara dinamis
+      // Contoh: 'https://domain.com/api/beranda' diubah menjadi 'https://domain.com'
+      final uri = Uri.parse(ApiConfig.beranda);
+      final baseUrl =
+          "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+
+      // Bersihkan slash di awal path database jika ada
+      final cleanPath = rawUrl.startsWith('/') ? rawUrl : '/$rawUrl';
+
+      // Menggabungkan domain + folder /storage + path (Contoh: https://domain.com/storage/logo_kafe/...)
+      return "$baseUrl/storage$cleanPath";
+    } catch (e) {
+      return rawUrl;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,8 +318,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                             ),
                           )
                         : SizedBox(
-                            height:
-                                170, // Ditingkatkan dari 145 supaya muat struktur vertikal baru
+                            height: 175,
                             child: ListView.builder(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.only(
@@ -305,8 +330,14 @@ class _BerandaScreenState extends State<BerandaScreen> {
                               itemBuilder: (context, index) {
                                 final item = lowonganList[index];
                                 final perusahaan = item['perusahaan'] ?? {};
+
+                                // Format url logo perusahaan lewat helper method
+                                final formattedLogo = _formatImageUrl(
+                                  perusahaan['logo_perusahaan'],
+                                );
+
                                 return _buildHorizontalJobCard(
-                                  logoUrl: perusahaan['logo_perusahaan'],
+                                  logoUrl: formattedLogo,
                                   jobTitle:
                                       item['posisi'] ??
                                       'Posisi tidak ditentukan',
@@ -318,7 +349,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                                       ? item['gaji'].toString()
                                       : 'Gaji Rahasia',
                                   onTap: () {
-                                    // Navigasi ke Detail Lowongan dengan membawa seluruh data item map dari DB
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -361,8 +391,13 @@ class _BerandaScreenState extends State<BerandaScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: Column(
                               children: perusahaanList.map((company) {
+                                // Format url logo perusahaan lewat helper method
+                                final formattedLogo = _formatImageUrl(
+                                  company['logo_perusahaan'],
+                                );
+
                                 return _buildVerticalCompanyCard(
-                                  logoUrl: company['logo_perusahaan'],
+                                  logoUrl: formattedLogo,
                                   name:
                                       company['nama_perusahaan'] ??
                                       'Tanpa Nama',
@@ -373,7 +408,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                                       company['deskripsi'] ??
                                       'Tidak ada deskripsi.',
                                   onTap: () {
-                                    // Navigasi ke Detail Perusahaan dengan membawa data company map dari DB
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -410,6 +444,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
         },
         itemCount: _bannerImages.length,
         itemBuilder: (context, index) {
+          // <--- SUDAH DIPERBAIKI (Bukan 'child:' lagi)
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: ClipRRect(
@@ -476,10 +511,10 @@ class _BerandaScreenState extends State<BerandaScreen> {
     required String companyName,
     required String location,
     required String salary,
-    required VoidCallback onTap, // Tambah parameter onTap
+    required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: onTap, // Sediakan trigger aksi tap ke container card lowongan
+      onTap: onTap,
       child: Container(
         width: 280,
         margin: const EdgeInsets.only(right: 16),
@@ -571,12 +606,9 @@ class _BerandaScreenState extends State<BerandaScreen> {
                 ),
               ],
             ),
-
-            // Bagian Informasi Lokasi & Gaji disusun secara Vertikal menggunakan Column
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Badge Lokasi (Sekarang mengambil lebar penuh/secara default)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -610,8 +642,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6), // Spasi jarak antara Lokasi dan Gaji
-                // Badge Gaji (Berada di bawah lokasi, sehingga aman saat string memanjang)
+                const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -648,10 +679,10 @@ class _BerandaScreenState extends State<BerandaScreen> {
     required String name,
     required String address,
     required String desc,
-    required VoidCallback onTap, // Tambah parameter onTap
+    required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: onTap, // Sediakan trigger aksi tap ke container card perusahaan
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),

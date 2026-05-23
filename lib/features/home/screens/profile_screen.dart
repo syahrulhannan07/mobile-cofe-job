@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data'; // Tambahan untuk Uint8List
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
@@ -16,11 +17,13 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  File? _image;
+  XFile? _imageFile; // Menggunakan XFile bawaan image_picker
+  Uint8List?
+  _imageBytes; // Menyimpan gambar dalam bentuk bytes agar cross-platform
   final _picker = ImagePicker();
   bool _isLoading = false;
 
-  // Definisikan Controller Utama
+  // Controller Utama Form Profil Master
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _ttlController = TextEditingController();
   final TextEditingController _genderController = TextEditingController();
@@ -28,10 +31,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _alamatController = TextEditingController();
   final TextEditingController _tentangSayaController = TextEditingController();
 
-  // Struktur Data Form Dinamis untuk Relasi Database
-  List<Map<String, TextEditingController>> _pendidikanForms = [];
-  List<Map<String, TextEditingController>> _skillForms = [];
-  List<Map<String, TextEditingController>> _pengalamanForms = [];
+  // Menyimpan data dinamis beserta ID dari database
+  List<Map<String, dynamic>> _pendidikanForms = [];
+  List<Map<String, dynamic>> _skillForms = [];
+  List<Map<String, dynamic>> _pengalamanForms = [];
 
   String? _currentPhotoUrl;
 
@@ -49,22 +52,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _phoneController.dispose();
     _alamatController.dispose();
     _tentangSayaController.dispose();
-
-    // Dispose semua controller dinamis
-    for (var form in _pendidikanForms) {
-      form.values.forEach((controller) => controller.dispose());
-    }
-    for (var form in _skillForms) {
-      form.values.forEach((controller) => controller.dispose());
-    }
-    for (var form in _pengalamanForms) {
-      form.values.forEach((controller) => controller.dispose());
-    }
+    _clearDynamicControllers();
     super.dispose();
   }
 
-  // --- FUNGSI TAMBAH FORM DINAMIS ---
+  void _clearDynamicControllers() {
+    for (var form in _pendidikanForms) {
+      form['institusi']?.dispose();
+      form['jurusan']?.dispose();
+      form['tingkat']?.dispose();
+      form['tahun_mulai']?.dispose();
+      form['tahun_selesai']?.dispose();
+    }
+    for (var form in _skillForms) {
+      form['nama_skill']?.dispose();
+    }
+    for (var form in _pengalamanForms) {
+      form['nama_perusahaan']?.dispose();
+      form['posisi']?.dispose();
+      form['tanggal_mulai']?.dispose();
+      form['tanggal_selesai']?.dispose();
+      form['deskripsi']?.dispose();
+    }
+  }
+
+  // --- FUNGSI GENERATE ELEMENT FORM BARU ---
   void _addPendidikanForm({
+    String? id,
     String institusi = '',
     String jurusan = '',
     String tingkat = '',
@@ -73,6 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     setState(() {
       _pendidikanForms.add({
+        'id': id,
         'institusi': TextEditingController(text: institusi),
         'jurusan': TextEditingController(text: jurusan),
         'tingkat': TextEditingController(text: tingkat),
@@ -82,16 +97,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  void _addSkillForm({String namaSkill = '', String deskripsi = ''}) {
+  void _addSkillForm({String? id, String namaSkill = ''}) {
     setState(() {
       _skillForms.add({
+        'id': id,
         'nama_skill': TextEditingController(text: namaSkill),
-        'deskripsi': TextEditingController(text: deskripsi),
       });
     });
   }
 
   void _addPengalamanForm({
+    String? id,
     String namaPerusahaan = '',
     String posisi = '',
     String tanggalMulai = '',
@@ -100,6 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     setState(() {
       _pengalamanForms.add({
+        'id': id,
         'nama_perusahaan': TextEditingController(text: namaPerusahaan),
         'posisi': TextEditingController(text: posisi),
         'tanggal_mulai': TextEditingController(text: tanggalMulai),
@@ -138,16 +155,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _namaController.text = profile['nama_lengkap']?.toString() ?? '';
             _ttlController.text = profile['tanggal_lahir']?.toString() ?? '';
 
-            // 🌟 SINKRONISASI JENIS KELAMIN: Membaca variasi output string dari Laravel
             String genderVal =
-                profile['jenis_kelamin']?.toString().toLowerCase() ?? '';
-            if (genderVal == 'l' || genderVal == 'laki-laki') {
+                profile['jenis_kelamin']?.toString().trim().toLowerCase() ?? '';
+            if (genderVal == 'l' ||
+                genderVal == 'laki-laki' ||
+                genderVal == 'laki_laki') {
               _genderController.text = 'Laki-laki';
             } else if (genderVal == 'p' || genderVal == 'perempuan') {
               _genderController.text = 'Perempuan';
             } else {
-              _genderController.text =
-                  'Laki-laki'; // Default fallback agar tidak kosong
+              _genderController.text = 'Laki-laki';
             }
 
             _phoneController.text = profile['nomor_telepon']?.toString() ?? '';
@@ -155,58 +172,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _tentangSayaController.text =
                 profile['tentang_saya']?.toString() ?? '';
 
-            // 🌟 SINKRONISASI FOTO PROFIL: Menggabungkan path relatif database dengan domain server utama
+            // Generate URL Foto
             String? rawPhotoUrl = profile['foto_profil']?.toString();
             if (rawPhotoUrl != null && rawPhotoUrl.isNotEmpty) {
-              if (rawPhotoUrl.startsWith('http')) {
+              if (rawPhotoUrl.startsWith('http://') ||
+                  rawPhotoUrl.startsWith('https://')) {
                 _currentPhotoUrl = rawPhotoUrl;
               } else {
-                // Menangani jika kembalian berupa 'storage/...' atau '/storage/...'
-                String cleanPath = rawPhotoUrl.startsWith('/')
-                    ? rawPhotoUrl.substring(1)
-                    : rawPhotoUrl;
-                _currentPhotoUrl = 'https://cofe-job.cicd.my.id/$cleanPath';
+                final uri = Uri.parse(ApiConfig.profile);
+                final baseUrl =
+                    "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
+                final cleanPath = rawPhotoUrl.startsWith('/')
+                    ? rawPhotoUrl
+                    : '/$rawPhotoUrl';
+                _currentPhotoUrl = "$baseUrl/storage$cleanPath";
               }
             } else {
               _currentPhotoUrl = null;
             }
 
+            _clearDynamicControllers();
             _pendidikanForms.clear();
             _skillForms.clear();
             _pengalamanForms.clear();
 
+            // 1. Load Data Pendidikan
             if (profile['pendidikan'] != null &&
                 profile['pendidikan'] is List) {
               for (var item in profile['pendidikan']) {
+                final detectedId =
+                    item['id'] ??
+                    item['id_pendidikan'] ??
+                    item['id_riwayat_pendidikan'];
                 _addPendidikanForm(
+                  id: detectedId?.toString(),
                   institusi: item['institusi']?.toString() ?? '',
                   jurusan: item['jurusan']?.toString() ?? '',
                   tingkat: item['tingkat']?.toString() ?? '',
-                  tahunMulai: item['tahun_mulai']?.toString() ?? '',
-                  tahunSelesai: item['tahun_selesai']?.toString() ?? '',
+                  tahunMulai: item['tahun_mulai'] != null
+                      ? item['tahun_mulai'].toString().split('T')[0]
+                      : '',
+                  tahunSelesai: item['tahun_selesai'] != null
+                      ? item['tahun_selesai'].toString().split('T')[0]
+                      : '',
                 );
               }
             }
 
+            // 2. Load Data Skill
             var skillData = profile['skills'] ?? profile['skill'];
             if (skillData != null && skillData is List) {
               for (var item in skillData) {
+                final detectedId =
+                    item['id'] ?? item['id_skill'] ?? item['id_keahlian'];
                 _addSkillForm(
+                  id: detectedId?.toString(),
                   namaSkill: (item['nama_skill'] ?? item['skill'] ?? '')
                       .toString(),
-                  deskripsi: item['deskripsi']?.toString() ?? '',
                 );
               }
             }
 
+            // 3. Load Data Pengalaman Kerja
             if (profile['pengalaman_kerja'] != null &&
                 profile['pengalaman_kerja'] is List) {
               for (var item in profile['pengalaman_kerja']) {
+                final detectedId =
+                    item['id'] ??
+                    item['id_pengalaman'] ??
+                    item['id_pengalaman_kerja'];
                 _addPengalamanForm(
+                  id: detectedId?.toString(),
                   namaPerusahaan: item['nama_perusahaan']?.toString() ?? '',
                   posisi: item['posisi']?.toString() ?? '',
-                  tanggalMulai: item['tanggal_mulai']?.toString() ?? '',
-                  tanggalSelesai: item['tanggal_selesai']?.toString() ?? '',
+                  tanggalMulai: item['tanggal_mulai'] != null
+                      ? item['tanggal_mulai'].toString().split('T')[0]
+                      : '',
+                  tanggalSelesai: item['tanggal_selesai'] != null
+                      ? item['tanggal_selesai'].toString().split('T')[0]
+                      : '',
                   deskripsi: item['deskripsi']?.toString() ?? '',
                 );
               }
@@ -218,110 +262,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showSnackBar(errorData['message'] ?? "Gagal mengambil data profil.");
       }
     } catch (e) {
-      _showSnackBar("Terjadi kesalahan koneksi atau sistem: $e");
+      _showSnackBar("Terjadi kesalahan koneksi saat memuat data: $e");
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  // --- POP-UP DIALOG SUKSES ---
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24.0),
-          ),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.rectangle,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20.0,
-                  offset: const Offset(0.0, 10.0),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 85,
-                  height: 85,
-                  decoration: BoxDecoration(
-                    color: Colors.greenAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.check_circle_rounded,
-                      color: Colors.green,
-                      size: 55,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  "Profil Diperbarui",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3748),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "Data riwayat pendidikan, skill kompetensi, dan pengalaman kerja Anda telah berhasil disimpan ke database.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF635147),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      "Selesai",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  // --- HAPUS DATA PERMANEN DARI DATABASE ---
+  Future<void> _deleteItemDirectly(
+    String type,
+    String id,
+    int localIndex,
+  ) async {
+    bool confirm = await _showConfirmDeleteDialog();
+    if (!confirm) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      String endpoint = '';
+      if (type == 'pendidikan') endpoint = '${ApiConfig.pendidikan}/$id';
+      if (type == 'skill') endpoint = '${ApiConfig.skill}/$id';
+      if (type == 'pengalaman') endpoint = '${ApiConfig.pengalaman}/$id';
+
+      print("DEBUG: Menghapus URL -> $endpoint");
+
+      final response = await http.delete(
+        Uri.parse(endpoint),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      print("DEBUG: DELETE Res Status -> ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        setState(() {
+          if (type == 'pendidikan') _pendidikanForms.removeAt(localIndex);
+          if (type == 'skill') _skillForms.removeAt(localIndex);
+          if (type == 'pengalaman') _pengalamanForms.removeAt(localIndex);
+        });
+        _showSnackBar("Data $type berhasil dihapus permanen.");
+      } else {
+        final errorData = json.decode(response.body);
+        _showSnackBar(
+          errorData['message'] ?? "Gagal menghapus data dari server.",
         );
-      },
-    );
+      }
+    } catch (e) {
+      _showSnackBar("Kesalahan sistem saat menghapus data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  // --- SIMPAN & UPDATE PROFIL KE API ---
+  // --- PROSES SIMPAN / UPDATE MENGGUNAKAN ENDPOINT SPESIFIK ---
   Future<void> _updateProfile() async {
     setState(() => _isLoading = true);
     try {
@@ -333,6 +330,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
+      // 1. UPDATE DATA UTAMA PROFIL
       final uri = Uri.parse(ApiConfig.updateProfile);
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll({
@@ -341,73 +339,124 @@ class _ProfileScreenState extends State<ProfileScreen> {
         })
         ..fields['nama_lengkap'] = _namaController.text
         ..fields['tanggal_lahir'] = _ttlController.text
-        // 🌟 FIX UTAMA VALiDATION: Mengirim string kecil utuh 'laki-laki' atau 'perempuan' agar lolos validasi Laravel
-        ..fields['jenis_kelamin'] =
-            _genderController.text.toLowerCase() == 'perempuan'
-            ? 'perempuan'
-            : 'laki-laki'
+        ..fields['jenis_kelamin'] = _genderController.text.trim()
         ..fields['nomor_telepon'] = _phoneController.text
         ..fields['alamat'] = _alamatController.text
         ..fields['tentang_saya'] = _tentangSayaController.text;
 
-      // Filter & Mapping Data Pendidikan
-      List<Map<String, String>> pendidikanData = _pendidikanForms
-          .where((f) => f['institusi']!.text.isNotEmpty)
-          .map(
-            (f) => {
-              'institusi': f['institusi']!.text,
-              'jurusan': f['jurusan']!.text,
-              'tingkat': f['tingkat']!.text,
-              'tahun_mulai': f['tahun_mulai']!.text,
-              'tahun_selesai': f['tahun_selesai']!.text,
-            },
-          )
-          .toList();
-      request.fields['pendidikan'] = json.encode(pendidikanData);
+      // MODIFIKASI: Menggunakan bytes agar kompatibel untuk Web dan Mobile
+      if (_imageBytes != null && _imageFile != null) {
+        String filename = _imageFile!.name;
+        String ext = filename.split('.').last.toLowerCase();
+        String mimeType = (ext == 'png') ? 'image/png' : 'image/jpeg';
 
-      // Filter & Mapping Data Skill (Key database backend: 'skills')
-      List<Map<String, String>> skillData = _skillForms
-          .where((f) => f['nama_skill']!.text.isNotEmpty)
-          .map(
-            (f) => {
-              'nama_skill': f['nama_skill']!.text,
-              'deskripsi': f['deskripsi']!.text,
-            },
-          )
-          .toList();
-      request.fields['skills'] = json.encode(skillData);
-
-      // Filter & Mapping Data Pengalaman Kerja
-      List<Map<String, String>> pengalamanData = _pengalamanForms
-          .where((f) => f['nama_perusahaan']!.text.isNotEmpty)
-          .map(
-            (f) => {
-              'nama_perusahaan': f['nama_perusahaan']!.text,
-              'posisi': f['posisi']!.text,
-              'tanggal_mulai': f['tanggal_mulai']!.text,
-              'tanggal_selesai': f['tanggal_selesai']!.text,
-              'deskripsi': f['deskripsi']!.text,
-            },
-          )
-          .toList();
-      request.fields['pengalaman_kerja'] = json.encode(pengalamanData);
-
-      if (_image != null) {
         request.files.add(
-          await http.MultipartFile.fromPath('foto_profil', _image!.path),
+          http.MultipartFile.fromBytes(
+            'foto_profil',
+            _imageBytes!,
+            filename: filename,
+            contentType: MediaType.parse(mimeType),
+          ),
         );
       }
 
       final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final mainResponse = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode == 200) {
-        _showSuccessDialog();
-        _fetchProfileData(); // Reload data segar dari database
-      } else {
-        final errorData = json.decode(response.body);
-        _showSnackBar(errorData['message'] ?? "Gagal memperbarui profil.");
+      if (mainResponse.statusCode != 200) {
+        final errorData = json.decode(mainResponse.body);
+        _showSnackBar(
+          errorData['message'] ?? "Gagal memperbarui data utama profil.",
+        );
+        setState(() => _isLoading = false);
+        return;
       }
+
+      Map<String, String> jsonHeaders = {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      // 2. PROSES ITERASI DATA PENDIDIKAN (POST / PUT)
+      for (var f in _pendidikanForms) {
+        String institusi = (f['institusi'] as TextEditingController).text;
+        if (institusi.isEmpty) continue;
+
+        Map<String, dynamic> body = {
+          'institusi': institusi,
+          'jurusan': (f['jurusan'] as TextEditingController).text,
+          'tingkat': (f['tingkat'] as TextEditingController).text,
+          'tahun_mulai': (f['tahun_mulai'] as TextEditingController).text,
+          'tahun_selesai': (f['tahun_selesai'] as TextEditingController).text,
+        };
+
+        if (f['id'] != null && f['id'].toString().isNotEmpty) {
+          await http.put(
+            Uri.parse('${ApiConfig.pendidikan}/${f['id']}'),
+            headers: jsonHeaders,
+            body: json.encode(body),
+          );
+        } else {
+          await http.post(
+            Uri.parse(ApiConfig.pendidikan),
+            headers: jsonHeaders,
+            body: json.encode(body),
+          );
+        }
+      }
+
+      // 3. PROSES ITERASI DATA SKILL (HANYA POST DATA BARU)
+      for (var f in _skillForms) {
+        String namaSkill = (f['nama_skill'] as TextEditingController).text;
+        if (namaSkill.isEmpty) continue;
+
+        // Jika skill sudah memiliki ID, lewati (tidak bisa/perlu update text)
+        if (f['id'] != null && f['id'].toString().isNotEmpty) {
+          continue;
+        }
+
+        // Jalankan POST hanya untuk skill baru yang diketik user
+        Map<String, dynamic> body = {'nama_skill': namaSkill};
+        await http.post(
+          Uri.parse(ApiConfig.skill),
+          headers: jsonHeaders,
+          body: json.encode(body),
+        );
+      }
+
+      // 4. PROSES ITERASI DATA PENGALAMAN (POST / PUT)
+      for (var f in _pengalamanForms) {
+        String namaPerusahaan =
+            (f['nama_perusahaan'] as TextEditingController).text;
+        if (namaPerusahaan.isEmpty) continue;
+
+        Map<String, dynamic> body = {
+          'nama_perusahaan': namaPerusahaan,
+          'posisi': (f['posisi'] as TextEditingController).text,
+          'tanggal_mulai': (f['tanggal_mulai'] as TextEditingController).text,
+          'tanggal_selesai':
+              (f['tanggal_selesai'] as TextEditingController).text,
+          'deskripsi': (f['deskripsi'] as TextEditingController).text,
+        };
+
+        if (f['id'] != null && f['id'].toString().isNotEmpty) {
+          await http.put(
+            Uri.parse('${ApiConfig.pengalaman}/${f['id']}'),
+            headers: jsonHeaders,
+            body: json.encode(body),
+          );
+        } else {
+          await http.post(
+            Uri.parse(ApiConfig.pengalaman),
+            headers: jsonHeaders,
+            body: json.encode(body),
+          );
+        }
+      }
+
+      _showSuccessDialog();
+      _fetchProfileData(); // Reload biar ID baru dari DB turun sinkron
     } catch (e) {
       _showSnackBar("Terjadi kesalahan sistem saat memperbarui data: $e");
     } finally {
@@ -415,11 +464,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<bool> _showConfirmDeleteDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Hapus Data"),
+            content: const Text(
+              "Apakah Anda yakin ingin menghapus riwayat ini secara permanen dari database?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("Batal"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  // MODIFIKASI: Membaca gambar ke dalam bentuk byte
   Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
     if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
       setState(() {
-        _image = File(pickedFile.path);
+        _imageFile = pickedFile;
+        _imageBytes = bytes;
       });
     }
   }
@@ -438,9 +516,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (controller.text.isNotEmpty) {
       try {
         initialDate = DateFormat('yyyy-MM-dd').parse(controller.text);
-      } catch (_) {
-        initialDate = DateTime.now();
-      }
+      } catch (_) {}
     }
 
     final DateTime? picked = await showDatePicker(
@@ -522,7 +598,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ),
-
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(25),
@@ -535,14 +610,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 CircleAvatar(
                                   radius: 65,
                                   backgroundColor: Colors.grey[300],
-                                  backgroundImage: _image != null
-                                      ? FileImage(_image!)
+                                  // MODIFIKASI: Menggunakan MemoryImage untuk menampilkan bytes
+                                  backgroundImage: _imageBytes != null
+                                      ? MemoryImage(_imageBytes!)
                                       : (_currentPhotoUrl != null
                                             ? NetworkImage(_currentPhotoUrl!)
                                                   as ImageProvider
                                             : null),
                                   child:
-                                      _image == null && _currentPhotoUrl == null
+                                      _imageBytes == null &&
+                                          _currentPhotoUrl == null
                                       ? const Icon(
                                           Icons.person,
                                           size: 80,
@@ -606,6 +683,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
+                          // --- RIWAYAT PENDIDIKAN ---
                           _buildSectionHeader(
                             "Riwayat Pendidikan",
                             () => _addPendidikanForm(),
@@ -618,38 +696,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   physics: const NeverScrollableScrollPhysics(),
                                   itemCount: _pendidikanForms.length,
                                   itemBuilder: (context, index) {
+                                    final item = _pendidikanForms[index];
                                     return _buildCardWrapper(
                                       index: index,
-                                      onRemove: () => setState(
-                                        () => _pendidikanForms.removeAt(index),
-                                      ),
+                                      onRemove: () {
+                                        if (item['id'] != null &&
+                                            item['id'].toString().isNotEmpty) {
+                                          _deleteItemDirectly(
+                                            'pendidikan',
+                                            item['id'],
+                                            index,
+                                          );
+                                        } else {
+                                          setState(
+                                            () => _pendidikanForms.removeAt(
+                                              index,
+                                            ),
+                                          );
+                                        }
+                                      },
                                       child: Column(
                                         children: [
                                           _buildSimpleField(
                                             "Nama Institusi",
-                                            _pendidikanForms[index]['institusi']!,
+                                            item['institusi']!,
                                           ),
                                           _buildSimpleField(
                                             "Jurusan",
-                                            _pendidikanForms[index]['jurusan']!,
+                                            item['jurusan']!,
                                           ),
                                           _buildSimpleField(
                                             "Tingkat (ex: S1/D3)",
-                                            _pendidikanForms[index]['tingkat']!,
+                                            item['tingkat']!,
                                           ),
                                           Row(
                                             children: [
                                               Expanded(
                                                 child: _buildSimpleDateField(
                                                   "Tahun Mulai",
-                                                  _pendidikanForms[index]['tahun_mulai']!,
+                                                  item['tahun_mulai']!,
                                                 ),
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
                                                 child: _buildSimpleDateField(
                                                   "Tahun Selesai",
-                                                  _pendidikanForms[index]['tahun_selesai']!,
+                                                  item['tahun_selesai']!,
                                                 ),
                                               ),
                                             ],
@@ -662,6 +754,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
+                          // --- SKILL / KEAHLIAN ---
                           _buildSectionHeader(
                             "Keahlian / Skill",
                             () => _addSkillForm(),
@@ -674,22 +767,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   physics: const NeverScrollableScrollPhysics(),
                                   itemCount: _skillForms.length,
                                   itemBuilder: (context, index) {
+                                    final item = _skillForms[index];
+                                    final bool isFromDb =
+                                        item['id'] != null &&
+                                        item['id'].toString().isNotEmpty;
+
                                     return _buildCardWrapper(
                                       index: index,
-                                      onRemove: () => setState(
-                                        () => _skillForms.removeAt(index),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          _buildSimpleField(
-                                            "Nama Skill",
-                                            _skillForms[index]['nama_skill']!,
-                                          ),
-                                          _buildSimpleField(
-                                            "Deskripsi Keahlian",
-                                            _skillForms[index]['deskripsi']!,
-                                          ),
-                                        ],
+                                      onRemove: () {
+                                        if (isFromDb) {
+                                          _deleteItemDirectly(
+                                            'skill',
+                                            item['id'],
+                                            index,
+                                          );
+                                        } else {
+                                          setState(
+                                            () => _skillForms.removeAt(index),
+                                          );
+                                        }
+                                      },
+                                      child: _buildSimpleField(
+                                        isFromDb
+                                            ? "Nama Skill (Tersimpan)"
+                                            : "Nama Skill Baru",
+                                        item['nama_skill']!,
+                                        readOnly: isFromDb,
                                       ),
                                     );
                                   },
@@ -697,6 +800,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                           const Divider(height: 40, thickness: 1),
 
+                          // --- PENGALAMAN KERJA ---
                           _buildSectionHeader(
                             "Pengalaman Kerja",
                             () => _addPengalamanForm(),
@@ -711,41 +815,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   physics: const NeverScrollableScrollPhysics(),
                                   itemCount: _pengalamanForms.length,
                                   itemBuilder: (context, index) {
+                                    final item = _pengalamanForms[index];
                                     return _buildCardWrapper(
                                       index: index,
-                                      onRemove: () => setState(
-                                        () => _pengalamanForms.removeAt(index),
-                                      ),
+                                      onRemove: () {
+                                        if (item['id'] != null &&
+                                            item['id'].toString().isNotEmpty) {
+                                          _deleteItemDirectly(
+                                            'pengalaman',
+                                            item['id'],
+                                            index,
+                                          );
+                                        } else {
+                                          setState(
+                                            () => _pengalamanForms.removeAt(
+                                              index,
+                                            ),
+                                          );
+                                        }
+                                      },
                                       child: Column(
                                         children: [
                                           _buildSimpleField(
                                             "Nama Perusahaan",
-                                            _pengalamanForms[index]['nama_perusahaan']!,
+                                            item['nama_perusahaan']!,
                                           ),
                                           _buildSimpleField(
                                             "Posisi / Jabatan",
-                                            _pengalamanForms[index]['posisi']!,
+                                            item['posisi']!,
                                           ),
                                           Row(
                                             children: [
                                               Expanded(
                                                 child: _buildSimpleDateField(
                                                   "Tanggal Mulai",
-                                                  _pengalamanForms[index]['tanggal_mulai']!,
+                                                  item['tanggal_mulai']!,
                                                 ),
                                               ),
                                               const SizedBox(width: 10),
                                               Expanded(
                                                 child: _buildSimpleDateField(
                                                   "Tanggal Selesai",
-                                                  _pengalamanForms[index]['tanggal_selesai']!,
+                                                  item['tanggal_selesai']!,
                                                 ),
                                               ),
                                             ],
                                           ),
                                           _buildSimpleField(
                                             "Deskripsi Pekerjaan",
-                                            _pengalamanForms[index]['deskripsi']!,
+                                            item['deskripsi']!,
                                           ),
                                         ],
                                       ),
@@ -778,7 +896,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           ),
-
                           const SizedBox(height: 40),
 
                           SizedBox(
@@ -822,7 +939,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- WIDGET HELPER UI ---
+  // --- REUSABLE COMPONENTS ---
   Widget _buildSectionHeader(String title, VoidCallback onAdd) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1040,14 +1157,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             value: controller.text.isEmpty ? null : controller.text,
-            items: items.map((String val) {
-              return DropdownMenuItem<String>(value: val, child: Text(val));
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                controller.text = value ?? '';
-              });
-            },
+            items: items
+                .map(
+                  (String val) =>
+                      DropdownMenuItem<String>(value: val, child: Text(val)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => controller.text = value ?? ''),
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 15,
@@ -1067,20 +1183,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSimpleField(String hint, TextEditingController controller) {
+  Widget _buildSimpleField(
+    String hint,
+    TextEditingController controller, {
+    bool readOnly = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextField(
         controller: controller,
-        style: const TextStyle(fontSize: 14),
+        readOnly: readOnly,
+        style: TextStyle(
+          fontSize: 14,
+          color: readOnly ? Colors.grey[600] : Colors.black,
+        ),
         decoration: InputDecoration(
           labelText: hint,
           labelStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+          filled: readOnly,
+          fillColor: readOnly ? Colors.grey[100] : Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          focusedBorder: readOnly
+              ? OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                )
+              : null,
         ),
       ),
     );
@@ -1109,6 +1241,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
+    );
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20.0,
+                  offset: const Offset(0.0, 10.0),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 85,
+                  height: 85,
+                  decoration: const BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.green,
+                      size: 55,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  "Profil Diperbarui",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2D3748),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Data master dan semua perubahan riwayat kompetensi Anda telah berhasil diproses.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF635147),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      "Selesai",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

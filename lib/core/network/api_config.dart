@@ -37,6 +37,15 @@ class ApiConfig {
   static const String updatePassword =
       '$baseUrl/pelamar/profil/update-password';
 
+  // Endpoint Spesifik Mandiri untuk Pendidikan
+  static const String pendidikan = "$baseUrl/pelamar/profil/pendidikan";
+
+  // Endpoint Spesifik Mandiri untuk Skill
+  static const String skill = "$baseUrl/pelamar/profil/skill";
+
+  // Endpoint Spesifik Mandiri untuk Pengalaman Kerja
+  static const String pengalaman = "$baseUrl/pelamar/profil/pengalaman";
+
   // Fitur Lowongan & Tracking
   static const String jobs = '$baseUrl/jobs';
   static const String trackingTimeline = '$baseUrl/tracking-timeline';

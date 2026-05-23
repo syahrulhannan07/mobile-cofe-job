@@ -1,7 +1,7 @@
 // lib/features/home/screens/detail_perusahaan_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
-import 'detail_lowongan_screen.dart'; // Import jika ingin container lowongan aktif bisa diklik
+import 'detail_lowongan_screen.dart';
 
 class DetailPerusahaanScreen extends StatelessWidget {
   final Map<String, dynamic> companyData;
@@ -10,16 +10,21 @@ class DetailPerusahaanScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Parsing data dari database/API map
-    final String name = companyData['nama_perusahaan'] ?? 'Tanpa Nama Kafe';
+    // Parsing data dari database/API map dengan aman
+    final String name = companyData['nama_perusahaan'] ?? 'Tanpa Nama Perusahaan';
     final String? logoUrl = companyData['logo_perusahaan'];
-    final String address =
-        companyData['alamat_perusahaan'] ?? 'Lokasi tidak diset';
-    final String desc =
-        companyData['deskripsi'] ?? 'Tidak ada deskripsi tentang kafe ini.';
+    final String address = companyData['alamat_perusahaan'] ?? 'Lokasi tidak diset';
+    final String desc = companyData['deskripsi'] ?? 'Tidak ada deskripsi tentang perusahaan ini.';
 
-    // Mengambil list lowongan dari model relasi perusahaan (jika ada dari API response)
-    final List activeJobs = companyData['lowongan'] ?? [];
+    // Penanganan ekstraksi list lowongan yang lebih fleksibel (menangani raw list atau wrapped array)
+    List activeJobs = [];
+    if (companyData['lowongan'] != null) {
+      if (companyData['lowongan'] is List) {
+        activeJobs = companyData['lowongan'];
+      } else if (companyData['lowongan'] is Map && companyData['lowongan']['data'] != null) {
+        activeJobs = companyData['lowongan']['data'];
+      }
+    }
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
@@ -39,57 +44,86 @@ class DetailPerusahaanScreen extends StatelessWidget {
           "Detail Perusahaan",
           style: TextStyle(
             color: AppColors.textMain,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w700,
             fontSize: 16,
+            letterSpacing: 0.5,
           ),
         ),
       ),
       body: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Header Profil Utama Kafe
+            // 1. Header Profil Utama Perusahaan
             Container(
               width: double.infinity,
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               child: Column(
                 children: [
-                  // Logo Lingkaran dengan ClipRRect
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      color: AppColors.brownLight.withOpacity(0.3),
-                      child: logoUrl != null && logoUrl.isNotEmpty
-                          ? Image.network(
-                              logoUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const Icon(
-                                    Icons.storefront_rounded,
-                                    color: AppColors.brownDark,
-                                    size: 45,
-                                  ),
-                            )
-                          : const Icon(
-                              Icons.storefront_rounded,
-                              color: AppColors.brownDark,
-                              size: 45,
-                            ),
+                  // Logo dengan styling premium
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.brownLight.withOpacity(0.4),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(4), // Border effect
+                    child: ClipOval(
+                      child: Container(
+                        color: AppColors.brownLight.withOpacity(0.1),
+                        child: logoUrl != null && logoUrl.isNotEmpty
+                            ? Image.network(
+                                logoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                  Icons.storefront_rounded,
+                                  color: AppColors.brownDark,
+                                  size: 45,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.storefront_rounded,
+                                color: AppColors.brownDark,
+                                size: 45,
+                              ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   // Nama Perusahaan
                   Text(
                     name,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                       color: AppColors.textMain,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -101,17 +135,18 @@ class DetailPerusahaanScreen extends StatelessWidget {
                       const Icon(
                         Icons.location_on_rounded,
                         size: 16,
-                        color: Colors.grey,
+                        color: AppColors.brownDark,
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6),
                       Flexible(
                         child: Text(
                           address,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey,
-                            height: 1.3,
+                            color: Colors.grey[600],
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
@@ -120,73 +155,102 @@ class DetailPerusahaanScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             // 2. Deskripsi / Tentang Perusahaan
-            Container(
-              width: double.infinity,
-              color: Colors.white,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Tentang Kafe",
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textMain,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.15)),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.brownLight.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: AppColors.brownDark,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          "Tentang Perusahaan",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMain,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    desc,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textMain.withOpacity(0.7),
-                      height: 1.5,
+                    const SizedBox(height: 12),
+                    Text(
+                      desc,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textMain.withOpacity(0.75),
+                        height: 1.6,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
 
-            // 3. Lowongan Aktif Section
+            // 3. Lowongan Aktif Section Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     "Lowongan Aktif",
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                       color: AppColors.textMain,
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.brownLight.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
+                      color: activeJobs.isNotEmpty
+                          ? AppColors.brownLight.withOpacity(0.2)
+                          : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       "${activeJobs.length} Posisi",
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brownDark,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: activeJobs.isNotEmpty
+                            ? AppColors.brownDark
+                            : Colors.grey[600],
                       ),
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
 
             // List Lowongan Aktif
             activeJobs.isEmpty
@@ -195,17 +259,32 @@ class DetailPerusahaanScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         children: [
-                          Icon(
-                            Icons.work_off_rounded,
-                            size: 40,
-                            color: Colors.grey[400],
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                )
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.work_off_rounded,
+                              size: 40,
+                              color: Colors.grey[300],
+                            ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
                           Text(
                             "Saat ini belum ada lowongan aktif.",
                             style: TextStyle(
                               color: Colors.grey[500],
-                              fontSize: 13,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -229,14 +308,14 @@ class DetailPerusahaanScreen extends StatelessWidget {
                       },
                     ),
                   ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  // Widget custom card item lowongan aktif di dalam kafe tersebut
+  // Widget custom card item lowongan aktif di dalam perusahaan tersebut
   Widget _buildJobItemCard({
     required BuildContext context,
     required Map<String, dynamic> jobData,
@@ -247,28 +326,30 @@ class DetailPerusahaanScreen extends StatelessWidget {
     final String location = jobData['lokasi'] ?? 'Indramayu';
     final String salary = jobData['gaji'] != null
         ? jobData['gaji'].toString()
-        : 'Gaji Rahasia';
+        : 'Gaji Dirahasiakan';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
+          splashColor: AppColors.brownLight.withOpacity(0.1),
+          highlightColor: Colors.transparent,
           onTap: () {
-            // Ketika lowongan diklik, arahkan ke detail lowongan screen bawa serta parameternya
-            // Supaya tidak null, kita bungkus kembali data perusahaan induk ke dalam object lowongan
+            // Membungkus kembali data perusahaan induk ke dalam object lowongan
             final Map<String, dynamic> completeJobData = Map.from(jobData);
             completeJobData['perusahaan'] = {
               'nama_perusahaan': companyName,
@@ -284,7 +365,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 // Info text lowongan
@@ -297,90 +378,99 @@ class DetailPerusahaanScreen extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
                           color: AppColors.textMain,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         companyName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      // Row Badge Info mini lokasi & gaji
+                      const SizedBox(height: 14),
+                      // Row Badge Info lokasi & gaji
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
+                        spacing: 10,
+                        runSpacing: 8,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.location_on_rounded,
-                                  size: 12,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  location,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          _buildMiniBadge(
+                            icon: Icons.location_on_rounded,
+                            text: location,
+                            bgColor: Colors.grey[100]!,
+                            textColor: Colors.grey[700]!,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.brownLight.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              salary.toLowerCase().contains('rp') ||
-                                      salary == "Gaji Rahasia"
-                                  ? salary
-                                  : "Rp $salary",
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppColors.brownDark,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                          _buildMiniBadge(
+                            icon: Icons.monetization_on_rounded,
+                            text: salary.toLowerCase().contains('rp') ||
+                                    salary == "Gaji Dirahasiakan"
+                                ? salary
+                                : "Rp $salary",
+                            bgColor: AppColors.brownLight.withOpacity(0.15),
+                            textColor: AppColors.brownDark,
                           ),
                         ],
                       ),
                     ],
                   ),
                 ),
-                // Arrow Icon Penunjuk klik
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: Colors.grey[400],
+                const SizedBox(width: 12),
+                // Tombol Arrow penunjuk aksi
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.brownLight.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: AppColors.brownDark,
+                  ),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // Helper widget untuk membuat badge kecil (lokasi, gaji, dll)
+  Widget _buildMiniBadge({
+    required IconData icon,
+    required String text,
+    required Color bgColor,
+    required Color textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: textColor.withOpacity(0.8),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              color: textColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
