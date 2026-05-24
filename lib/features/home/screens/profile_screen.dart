@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'dart:typed_data'; // Tambahan untuk Uint8List
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,11 +17,13 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  XFile? _imageFile; // Menggunakan XFile bawaan image_picker
-  Uint8List?
-  _imageBytes; // Menyimpan gambar dalam bentuk bytes agar cross-platform
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
   final _picker = ImagePicker();
   bool _isLoading = false;
+
+  // State Mode Edit untuk Profil Utama
+  bool _isEditingMaster = false;
 
   // Controller Utama Form Profil Master
   final TextEditingController _namaController = TextEditingController();
@@ -287,8 +289,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (type == 'skill') endpoint = '${ApiConfig.skill}/$id';
       if (type == 'pengalaman') endpoint = '${ApiConfig.pengalaman}/$id';
 
-      print("DEBUG: Menghapus URL -> $endpoint");
-
       final response = await http.delete(
         Uri.parse(endpoint),
         headers: {
@@ -297,14 +297,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
 
-      print("DEBUG: DELETE Res Status -> ${response.statusCode}");
       if (response.statusCode == 200 || response.statusCode == 204) {
         setState(() {
           if (type == 'pendidikan') _pendidikanForms.removeAt(localIndex);
           if (type == 'skill') _skillForms.removeAt(localIndex);
           if (type == 'pengalaman') _pengalamanForms.removeAt(localIndex);
         });
-        _showSnackBar("Data $type berhasil dihapus permanen.");
+        _showSnackBar("Data $type berhasil dihapus.");
       } else {
         final errorData = json.decode(response.body);
         _showSnackBar(
@@ -318,8 +317,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- PROSES SIMPAN / UPDATE MENGGUNAKAN ENDPOINT SPESIFIK ---
-  Future<void> _updateProfile() async {
+  // --- MANDIRI: SIMPAN DATA UTAMA PROFIL ---
+  Future<void> _updateMasterProfile() async {
     setState(() => _isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -330,7 +329,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
-      // 1. UPDATE DATA UTAMA PROFIL
       final uri = Uri.parse(ApiConfig.updateProfile);
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll({
@@ -344,7 +342,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ..fields['alamat'] = _alamatController.text
         ..fields['tentang_saya'] = _tentangSayaController.text;
 
-      // MODIFIKASI: Menggunakan bytes agar kompatibel untuk Web dan Mobile
       if (_imageBytes != null && _imageFile != null) {
         String filename = _imageFile!.name;
         String ext = filename.split('.').last.toLowerCase();
@@ -363,14 +360,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final streamedResponse = await request.send();
       final mainResponse = await http.Response.fromStream(streamedResponse);
 
-      if (mainResponse.statusCode != 200) {
+      if (mainResponse.statusCode == 200) {
+        _showSuccessDialog(
+          "Profil Pelamar Diperbarui",
+          "Data master profil utama Anda berhasil disimpan.",
+        );
+        setState(() => _isEditingMaster = false);
+        _fetchProfileData();
+      } else {
         final errorData = json.decode(mainResponse.body);
         _showSnackBar(
-          errorData['message'] ?? "Gagal memperbarui data utama profil.",
+          errorData['message'] ?? "Gagal memperbarui profil utama.",
         );
-        setState(() => _isLoading = false);
-        return;
       }
+    } catch (e) {
+      _showSnackBar("Terjadi kesalahan sistem: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- MANDIRI: SIMPAN/UPDATE SATU DATA PENDIDIKAN ---
+  Future<void> _saveSinglePendidikan(int index) async {
+    final form = _pendidikanForms[index];
+    String institusi = (form['institusi'] as TextEditingController).text;
+
+    if (institusi.isEmpty) {
+      _showSnackBar("Nama Institusi harus diisi.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
 
       Map<String, String> jsonHeaders = {
         'Authorization': 'Bearer $token',
@@ -378,87 +401,144 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'Content-Type': 'application/json',
       };
 
-      // 2. PROSES ITERASI DATA PENDIDIKAN (POST / PUT)
-      for (var f in _pendidikanForms) {
-        String institusi = (f['institusi'] as TextEditingController).text;
-        if (institusi.isEmpty) continue;
+      Map<String, dynamic> body = {
+        'institusi': institusi,
+        'jurusan': (form['jurusan'] as TextEditingController).text,
+        'tingkat': (form['tingkat'] as TextEditingController).text,
+        'tahun_mulai': (form['tahun_mulai'] as TextEditingController).text,
+        'tahun_selesai': (form['tahun_selesai'] as TextEditingController).text,
+      };
 
-        Map<String, dynamic> body = {
-          'institusi': institusi,
-          'jurusan': (f['jurusan'] as TextEditingController).text,
-          'tingkat': (f['tingkat'] as TextEditingController).text,
-          'tahun_mulai': (f['tahun_mulai'] as TextEditingController).text,
-          'tahun_selesai': (f['tahun_selesai'] as TextEditingController).text,
-        };
-
-        if (f['id'] != null && f['id'].toString().isNotEmpty) {
-          await http.put(
-            Uri.parse('${ApiConfig.pendidikan}/${f['id']}'),
-            headers: jsonHeaders,
-            body: json.encode(body),
-          );
-        } else {
-          await http.post(
-            Uri.parse(ApiConfig.pendidikan),
-            headers: jsonHeaders,
-            body: json.encode(body),
-          );
-        }
-      }
-
-      // 3. PROSES ITERASI DATA SKILL (HANYA POST DATA BARU)
-      for (var f in _skillForms) {
-        String namaSkill = (f['nama_skill'] as TextEditingController).text;
-        if (namaSkill.isEmpty) continue;
-
-        // Jika skill sudah memiliki ID, lewati (tidak bisa/perlu update text)
-        if (f['id'] != null && f['id'].toString().isNotEmpty) {
-          continue;
-        }
-
-        // Jalankan POST hanya untuk skill baru yang diketik user
-        Map<String, dynamic> body = {'nama_skill': namaSkill};
-        await http.post(
-          Uri.parse(ApiConfig.skill),
+      http.Response response;
+      if (form['id'] != null && form['id'].toString().isNotEmpty) {
+        response = await http.put(
+          Uri.parse('${ApiConfig.pendidikan}/${form['id']}'),
+          headers: jsonHeaders,
+          body: json.encode(body),
+        );
+      } else {
+        response = await http.post(
+          Uri.parse(ApiConfig.pendidikan),
           headers: jsonHeaders,
           body: json.encode(body),
         );
       }
 
-      // 4. PROSES ITERASI DATA PENGALAMAN (POST / PUT)
-      for (var f in _pengalamanForms) {
-        String namaPerusahaan =
-            (f['nama_perusahaan'] as TextEditingController).text;
-        if (namaPerusahaan.isEmpty) continue;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _showSnackBar("Data pendidikan berhasil disimpan.");
+        _fetchProfileData(); // Reload biar ID sinkron
+      } else {
+        final errorData = json.decode(response.body);
+        _showSnackBar(
+          errorData['message'] ?? "Gagal menyimpan data pendidikan.",
+        );
+      }
+    } catch (e) {
+      _showSnackBar("Terjadi kesalahan: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
-        Map<String, dynamic> body = {
-          'nama_perusahaan': namaPerusahaan,
-          'posisi': (f['posisi'] as TextEditingController).text,
-          'tanggal_mulai': (f['tanggal_mulai'] as TextEditingController).text,
-          'tanggal_selesai':
-              (f['tanggal_selesai'] as TextEditingController).text,
-          'deskripsi': (f['deskripsi'] as TextEditingController).text,
-        };
+  // --- MANDIRI: SIMPAN SATU DATA SKILL (HANYA POST DATA BARU) ---
+  Future<void> _saveSingleSkill(int index) async {
+    final form = _skillForms[index];
+    String namaSkill = (form['nama_skill'] as TextEditingController).text;
 
-        if (f['id'] != null && f['id'].toString().isNotEmpty) {
-          await http.put(
-            Uri.parse('${ApiConfig.pengalaman}/${f['id']}'),
-            headers: jsonHeaders,
-            body: json.encode(body),
-          );
-        } else {
-          await http.post(
-            Uri.parse(ApiConfig.pengalaman),
-            headers: jsonHeaders,
-            body: json.encode(body),
-          );
-        }
+    if (namaSkill.isEmpty) {
+      _showSnackBar("Nama skill tidak boleh kosong.");
+      return;
+    }
+
+    if (form['id'] != null && form['id'].toString().isNotEmpty) {
+      _showSnackBar("Skill ini sudah tersimpan di database.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      final response = await http.post(
+        Uri.parse(ApiConfig.skill),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'nama_skill': namaSkill}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _showSnackBar("Keahlian baru berhasil ditambahkan.");
+        _fetchProfileData();
+      } else {
+        final errorData = json.decode(response.body);
+        _showSnackBar(errorData['message'] ?? "Gagal menambahkan keahlian.");
+      }
+    } catch (e) {
+      _showSnackBar("Terjadi kesalahan: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- MANDIRI: SIMPAN/UPDATE SATU DATA PENGALAMAN ---
+  Future<void> _saveSinglePengalaman(int index) async {
+    final form = _pengalamanForms[index];
+    String namaPerusahaan =
+        (form['nama_perusahaan'] as TextEditingController).text;
+
+    if (namaPerusahaan.isEmpty) {
+      _showSnackBar("Nama perusahaan harus diisi.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      Map<String, String> jsonHeaders = {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      Map<String, dynamic> body = {
+        'nama_perusahaan': namaPerusahaan,
+        'posisi': (form['posisi'] as TextEditingController).text,
+        'tanggal_mulai': (form['tanggal_mulai'] as TextEditingController).text,
+        'tanggal_selesai':
+            (form['tanggal_selesai'] as TextEditingController).text,
+        'deskripsi': (form['deskripsi'] as TextEditingController).text,
+      };
+
+      http.Response response;
+      if (form['id'] != null && form['id'].toString().isNotEmpty) {
+        response = await http.put(
+          Uri.parse('${ApiConfig.pengalaman}/${form['id']}'),
+          headers: jsonHeaders,
+          body: json.encode(body),
+        );
+      } else {
+        response = await http.post(
+          Uri.parse(ApiConfig.pengalaman),
+          headers: jsonHeaders,
+          body: json.encode(body),
+        );
       }
 
-      _showSuccessDialog();
-      _fetchProfileData(); // Reload biar ID baru dari DB turun sinkron
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _showSnackBar("Data pengalaman kerja berhasil disimpan.");
+        _fetchProfileData();
+      } else {
+        final errorData = json.decode(response.body);
+        _showSnackBar(errorData['message'] ?? "Gagal menyimpan pengalaman.");
+      }
     } catch (e) {
-      _showSnackBar("Terjadi kesalahan sistem saat memperbarui data: $e");
+      _showSnackBar("Terjadi kesalahan: $e");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -487,7 +567,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         false;
   }
 
-  // MODIFIKASI: Membaca gambar ke dalam bentuk byte
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -557,6 +636,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : Column(
                 children: [
                   const SizedBox(height: 20),
+                  // Custom Header Toolbar
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
@@ -598,19 +678,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ),
+
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(25),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // --- SECTION FOTO PROFIL ---
                           Center(
                             child: Stack(
                               children: [
                                 CircleAvatar(
                                   radius: 65,
                                   backgroundColor: Colors.grey[300],
-                                  // MODIFIKASI: Menggunakan MemoryImage untuk menampilkan bytes
                                   backgroundImage: _imageBytes != null
                                       ? MemoryImage(_imageBytes!)
                                       : (_currentPhotoUrl != null
@@ -627,59 +708,188 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         )
                                       : null,
                                 ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: GestureDetector(
-                                    onTap: _pickImage,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: coffeeBrown,
-                                          width: 2,
+                                if (_isEditingMaster)
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: GestureDetector(
+                                      onTap: _pickImage,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: coffeeBrown,
+                                            width: 2,
+                                          ),
                                         ),
-                                      ),
-                                      child: const Icon(
-                                        Icons.edit_note_rounded,
-                                        color: coffeeBrown,
+                                        child: const Icon(
+                                          Icons.camera_alt_rounded,
+                                          color: coffeeBrown,
+                                          size: 20,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 25),
 
+                          // --- HEADER FORM PROFIL PELAMAR ---
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                "Profil Pelamar",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: coffeeBrown,
+                                ),
+                              ),
+                              if (!_isEditingMaster)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit_note_rounded,
+                                    color: coffeeBrown,
+                                    size: 28,
+                                  ),
+                                  onPressed: () =>
+                                      setState(() => _isEditingMaster = true),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 15),
+
+                          // --- FIELD FORM MASTER PROFIL ---
                           _buildTextField(
                             "Nama Lengkap",
                             "Masukkan nama lengkap",
                             _namaController,
+                            enabled: _isEditingMaster,
                           ),
                           _buildDateField(
                             "Tanggal Lahir",
                             "Pilih tanggal lahir",
                             _ttlController,
+                            enabled: _isEditingMaster,
                           ),
                           _buildDropdownField(
                             "Jenis Kelamin",
                             _genderController,
                             ["Laki-laki", "Perempuan"],
+                            enabled: _isEditingMaster,
                           ),
                           _buildTextField(
                             "Nomor Telepon",
                             "08xxxxxxxxxx",
                             _phoneController,
                             keyboardType: TextInputType.phone,
+                            enabled: _isEditingMaster,
                           ),
                           _buildTextField(
                             "Alamat",
                             "Alamat lengkap saat ini",
                             _alamatController,
+                            enabled: _isEditingMaster,
                           ),
+
+                          // Field Tentang Saya dimasukkan ke lingkup Master Profile
+                          const Text(
+                            "Tentang Saya",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _tentangSayaController,
+                            maxLines: 4,
+                            enabled: _isEditingMaster,
+                            decoration: InputDecoration(
+                              hintText:
+                                  "Ceritakan singkat tentang diri Anda...",
+                              filled: true,
+                              fillColor: _isEditingMaster
+                                  ? AppColors.brownLight.withOpacity(0.2)
+                                  : Colors.grey[100],
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.grey[300]!,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.grey[300]!,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+
+                          // --- TOMBOL EDIT AKSI MASTER PROFIL ---
+                          if (_isEditingMaster) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      side: const BorderSide(
+                                        color: coffeeBrown,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      setState(() => _isEditingMaster = false);
+                                      _fetchProfileData(); // Rollback data
+                                    },
+                                    child: const Text(
+                                      "Batal",
+                                      style: TextStyle(
+                                        color: coffeeBrown,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: coffeeBrown,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                    onPressed: _isLoading
+                                        ? null
+                                        : _updateMasterProfile,
+                                    child: const Text(
+                                      "Simpan Profil",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
 
                           const Divider(height: 40, thickness: 1),
 
@@ -697,11 +907,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   itemCount: _pendidikanForms.length,
                                   itemBuilder: (context, index) {
                                     final item = _pendidikanForms[index];
+                                    final bool isSavedInDb =
+                                        item['id'] != null &&
+                                        item['id'].toString().isNotEmpty;
                                     return _buildCardWrapper(
                                       index: index,
                                       onRemove: () {
-                                        if (item['id'] != null &&
-                                            item['id'].toString().isNotEmpty) {
+                                        if (isSavedInDb) {
                                           _deleteItemDirectly(
                                             'pendidikan',
                                             item['id'],
@@ -746,6 +958,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               ),
                                             ],
                                           ),
+                                          const SizedBox(height: 10),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: coffeeBrown,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 8,
+                                                    ),
+                                              ),
+                                              onPressed: () =>
+                                                  _saveSinglePendidikan(index),
+                                              icon: const Icon(
+                                                Icons.check_rounded,
+                                                size: 16,
+                                                color: Colors.white,
+                                              ),
+                                              label: Text(
+                                                isSavedInDb
+                                                    ? "Perbarui"
+                                                    : "Simpan",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     );
@@ -787,12 +1029,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         }
                                       },
-                                      child: _buildSimpleField(
-                                        isFromDb
-                                            ? "Nama Skill (Tersimpan)"
-                                            : "Nama Skill Baru",
-                                        item['nama_skill']!,
-                                        readOnly: isFromDb,
+                                      child: Column(
+                                        children: [
+                                          _buildSimpleField(
+                                            isFromDb
+                                                ? "Nama Skill (Tersimpan)"
+                                                : "Nama Skill Baru",
+                                            item['nama_skill']!,
+                                            readOnly: isFromDb,
+                                          ),
+                                          if (!isFromDb) ...[
+                                            const SizedBox(height: 8),
+                                            Align(
+                                              alignment: Alignment.centerRight,
+                                              child: ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: coffeeBrown,
+                                                ),
+                                                onPressed: () =>
+                                                    _saveSingleSkill(index),
+                                                icon: const Icon(
+                                                  Icons.save,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                ),
+                                                label: const Text(
+                                                  "Simpan Skill",
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     );
                                   },
@@ -816,11 +1087,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   itemCount: _pengalamanForms.length,
                                   itemBuilder: (context, index) {
                                     final item = _pengalamanForms[index];
+                                    final bool isSavedInDb =
+                                        item['id'] != null &&
+                                        item['id'].toString().isNotEmpty;
                                     return _buildCardWrapper(
                                       index: index,
                                       onRemove: () {
-                                        if (item['id'] != null &&
-                                            item['id'].toString().isNotEmpty) {
+                                        if (isSavedInDb) {
                                           _deleteItemDirectly(
                                             'pengalaman',
                                             item['id'],
@@ -865,70 +1138,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             "Deskripsi Pekerjaan",
                                             item['deskripsi']!,
                                           ),
+                                          const SizedBox(height: 10),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: coffeeBrown,
+                                              ),
+                                              onPressed: () =>
+                                                  _saveSinglePengalaman(index),
+                                              icon: const Icon(
+                                                Icons.check_rounded,
+                                                size: 16,
+                                                color: Colors.white,
+                                              ),
+                                              label: Text(
+                                                isSavedInDb
+                                                    ? "Perbarui"
+                                                    : "Simpan",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     );
                                   },
                                 ),
-
-                          const Divider(height: 40, thickness: 1),
-
-                          const Text(
-                            "Tentang Saya",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _tentangSayaController,
-                            maxLines: 4,
-                            decoration: InputDecoration(
-                              hintText:
-                                  "Ceritakan singkat tentang diri Anda...",
-                              filled: true,
-                              fillColor: AppColors.brownLight.withOpacity(0.3),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
                           const SizedBox(height: 40),
-
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: coffeeBrown,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 15,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                              ),
-                              onPressed: _isLoading ? null : _updateProfile,
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "Simpan Perubahan",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -1051,6 +1291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String hint,
     TextEditingController controller, {
     TextInputType keyboardType = TextInputType.text,
+    bool enabled = true,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
@@ -1069,8 +1310,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextField(
             controller: controller,
             keyboardType: keyboardType,
+            enabled: enabled,
             decoration: InputDecoration(
               hintText: hint,
+              filled: !enabled,
+              fillColor: enabled ? Colors.transparent : Colors.grey[100],
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 15,
                 vertical: 12,
@@ -1092,8 +1336,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildDateField(
     String label,
     String hint,
-    TextEditingController controller,
-  ) {
+    TextEditingController controller, {
+    bool enabled = true,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: Column(
@@ -1111,12 +1356,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextField(
             controller: controller,
             readOnly: true,
-            onTap: () => _selectDate(context, controller),
+            enabled: enabled,
+            onTap: enabled ? () => _selectDate(context, controller) : null,
             decoration: InputDecoration(
               hintText: hint,
-              suffixIcon: const Icon(
+              filled: !enabled,
+              fillColor: enabled ? Colors.transparent : Colors.grey[100],
+              suffixIcon: Icon(
                 Icons.calendar_month_rounded,
-                color: Color(0xFF635147),
+                color: enabled ? const Color(0xFF635147) : Colors.grey,
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 15,
@@ -1139,8 +1387,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildDropdownField(
     String label,
     TextEditingController controller,
-    List<String> items,
-  ) {
+    List<String> items, {
+    bool enabled = true,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: Column(
@@ -1163,8 +1412,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       DropdownMenuItem<String>(value: val, child: Text(val)),
                 )
                 .toList(),
-            onChanged: (value) => setState(() => controller.text = value ?? ''),
+            onChanged: enabled
+                ? (value) => setState(() => controller.text = value ?? '')
+                : null,
             decoration: InputDecoration(
+              filled: !enabled,
+              fillColor: enabled ? Colors.transparent : Colors.grey[100],
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 15,
                 vertical: 12,
@@ -1207,12 +1460,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             vertical: 10,
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          focusedBorder: readOnly
-              ? OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                )
-              : null,
         ),
       ),
     );
@@ -1244,7 +1491,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog(String title, String desc) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1259,20 +1506,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20.0,
-                  offset: const Offset(0.0, 10.0),
-                ),
-              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 85,
-                  height: 85,
+                  width: 75,
+                  height: 75,
                   decoration: const BoxDecoration(
                     color: Colors.greenAccent,
                     shape: BoxShape.circle,
@@ -1281,48 +1521,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Icon(
                       Icons.check_circle_rounded,
                       color: Colors.green,
-                      size: 55,
+                      size: 50,
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  "Profil Diperbarui",
-                  style: TextStyle(
-                    fontSize: 20,
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2D3748),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Text(
-                  "Data master dan semua perubahan riwayat kompetensi Anda telah berhasil diproses.",
+                  desc,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: Colors.grey[600],
-                    height: 1.5,
+                    height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
+                  height: 45,
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF635147),
-                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      elevation: 0,
                     ),
                     child: const Text(
                       "Selesai",
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
                   ),

@@ -1,37 +1,152 @@
+// lib/features/home/screens/tracking_timeline_screen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
+import '../../../core/network/api_config.dart';
 
-class TrackingTimelineScreen extends StatelessWidget {
-  final String jobTitle;
-  final String companyName;
-  final String status;
+class TrackingTimelineScreen extends StatefulWidget {
+  final int lamaranId;
 
-  const TrackingTimelineScreen({
-    super.key,
-    required this.jobTitle,
-    required this.companyName,
-    required this.status,
-  });
+  const TrackingTimelineScreen({super.key, required this.lamaranId});
 
-  // --- FUNGSI UNTUK MENAMPILKAN POP-UP DETAIL JADWAL ---
+  @override
+  State<TrackingTimelineScreen> createState() => _TrackingTimelineScreenState();
+}
+
+class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  Map<String, dynamic>? _data;
+  Map<String, dynamic>? _wawancara;
+  List<dynamic> _timelineData = [];
+
+  @override
+  void initState() {
+    super.initState();
+    initializeDateFormatting('id_ID', null).then((_) {
+      _fetchDetailLamaran();
+    });
+  }
+
+  Future<void> _fetchDetailLamaran() async {
+    if (!mounted) return;
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString("token");
+
+      final String targetedUrl = ApiConfig.detailLamaran(widget.lamaranId);
+      debugPrint("=== CALLING DETAIL API ===");
+      debugPrint("Targeted URL: $targetedUrl");
+
+      final response = await http.get(
+        Uri.parse(targetedUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      debugPrint("Detail Response Code: ${response.statusCode}");
+      debugPrint("Detail Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final jsonResponse = json.decode(response.body);
+
+        if (jsonResponse['status'] == 'success') {
+          final apiData = jsonResponse['data'];
+
+          setState(() {
+            _data = apiData;
+            _wawancara = apiData['wawancara'];
+
+            if (apiData['timeline'] != null && apiData['timeline'] is List) {
+              final rawTimeline = apiData['timeline'] as List;
+
+              // BALIK DATA TERLEBIH DAHULU (Menjadi ASC: log lama ke baru)
+              final reversedTimeline = List.from(rawTimeline.reversed);
+
+              // SISTEMATIKAL FILTERING (Menghilangkan double container wawancara)
+              // Kita kumpulkan data timeline secara bersih, sama persis dengan logic map di React
+              _timelineData = reversedTimeline;
+            } else {
+              _timelineData = [];
+            }
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _errorMessage = "Gagal memuat data detail lamaran.";
+            _isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 404) {
+        setState(() {
+          _errorMessage =
+              "Data tidak ditemukan (404). Silakan periksa kembali integrasi ID database.";
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage =
+              "Error Server internal: Status ${response.statusCode}";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error detail lamaran screen: $e");
+      setState(() {
+        _errorMessage =
+            "Koneksi gagal atau terjadi galat dalam memproses data.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTanggal(String? tanggalRaw, {bool denganJam = false}) {
+    if (tanggalRaw == null || tanggalRaw.isEmpty) {
+      return 'Tanggal tidak tersedia';
+    }
+    try {
+      DateTime dateTime = DateTime.parse(tanggalRaw).toLocal();
+      if (denganJam) {
+        return DateFormat("dd MMMM yyyy - HH:mm", "id_ID").format(dateTime);
+      }
+      return DateFormat("dd MMMM yyyy", "id_ID").format(dateTime);
+    } catch (e) {
+      return tanggalRaw;
+    }
+  }
+
   void _showJadwalPopup(BuildContext context) {
+    if (_wawancara == null) return;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
+            borderRadius: BorderRadius.circular(24.0),
           ),
           elevation: 5,
           backgroundColor: Colors.white,
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Bagian Header Pop-up
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -40,15 +155,15 @@ class TrackingTimelineScreen extends StatelessWidget {
                           Icon(
                             Icons.calendar_month_rounded,
                             color: AppColors.brownDark,
-                            size: 28,
+                            size: 24,
                           ),
                           SizedBox(width: 10),
                           Text(
-                            "Jadwal Wawancara",
+                            "Detail Jadwal Wawancara",
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.brownDark,
+                              color: Color(0xFF2D1B18),
                             ),
                           ),
                         ],
@@ -59,58 +174,50 @@ class TrackingTimelineScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const Divider(height: 25, thickness: 1),
+                  const Divider(
+                    height: 25,
+                    thickness: 1,
+                    color: Color(0xFFF0EDE9),
+                  ),
 
-                  // Detail Informasi Jadwal
                   _buildPopupDetailRow(
                     "Nama Pelamar",
-                    "Trivaldo Ernandi",
+                    _data?['nama_pelamar'] ?? 'Pelamar',
                     Icons.person_outline_rounded,
                   ),
                   const SizedBox(height: 12),
                   _buildPopupDetailRow(
-                    "Perusahaan",
-                    companyName,
-                    Icons.business_rounded,
+                    "Lokasi / Link Pertemuan",
+                    _wawancara?['lokasi'] ?? '-',
+                    Icons.location_on_rounded,
                   ),
                   const SizedBox(height: 12),
                   _buildPopupDetailRow(
-                    "Posisi",
-                    jobTitle,
-                    Icons.work_outline_rounded,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Lokasi / Link",
-                    "Google Meet (meet.google.com/abc-defg-hij)",
-                    Icons.videocam_outlined,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Tanggal",
-                    "28 Maret 2026",
-                    Icons.date_range_rounded,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Waktu",
-                    "10:00 WIB",
+                    "Tanggal & Waktu",
+                    _formatTanggal(
+                      _wawancara?['tanggal'] ?? _wawancara?['waktu_wawancara'],
+                      denganJam: true,
+                    ),
                     Icons.access_time_rounded,
                   ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Catatan",
-                    "Tepat waktu",
-                    Icons.sticky_note_2_outlined,
-                  ),
-                  const SizedBox(height: 15),
 
-                  // Status Pertemuan
+                  if (_wawancara?['catatan'] != null &&
+                      (_wawancara?['catatan']?.toString().isNotEmpty ??
+                          false)) ...[
+                    const SizedBox(height: 12),
+                    _buildPopupDetailRow(
+                      "Catatan Tambahan",
+                      '"${_wawancara?['catatan']}"',
+                      Icons.sticky_note_2_outlined,
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        "Status Kontrak:",
+                        "Status:",
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -123,14 +230,15 @@ class TrackingTimelineScreen extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.greenAccent,
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.lightGreenAccent),
+                          color: const Color(0xFFFBB041),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text(
-                          "Terjadwal",
-                          style: TextStyle(
-                            color: Colors.green,
+                        child: Text(
+                          _wawancara?['status_jadwal'] ??
+                              _wawancara?['status'] ??
+                              'Terjadwal',
+                          style: const TextStyle(
+                            color: Color(0xFF3D2722),
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -138,24 +246,24 @@ class TrackingTimelineScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Tombol Tutup
                   SizedBox(
                     width: double.infinity,
                     height: 45,
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brownDark,
+                        backgroundColor: const Color(0xFFFBB041),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(20),
                         ),
+                        elevation: 0,
                       ),
                       child: const Text(
-                        "Tutup",
+                        "Konfirmasi",
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Color(0xFF3D2722),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -170,12 +278,11 @@ class TrackingTimelineScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGET HELPER UNTUK BARIS DETAIL POP-UP ---
   Widget _buildPopupDetailRow(String label, String value, IconData icon) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: AppColors.brownDark.withOpacity(0.7)),
+        Icon(icon, size: 20, color: const Color(0xFF8B5E3C)),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -194,7 +301,7 @@ class TrackingTimelineScreen extends StatelessWidget {
                 value,
                 style: const TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF2D3748),
+                  color: Color(0xFF2D1B18),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -207,6 +314,53 @@ class TrackingTimelineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.brownDark),
+        ),
+      );
+    }
+
+    if (_errorMessage != null || _data == null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _errorMessage ?? "Data lamaran tidak ditemukan.",
+                  style: const TextStyle(color: Colors.grey, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton(
+                  onPressed: _fetchDetailLamaran,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brownDark,
+                  ),
+                  child: const Text(
+                    "Coba Lagi",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    String tanggalLamar = 'Tanggal tidak tersedia';
+    if (_data!['timeline'] != null && (_data!['timeline'] as List).isNotEmpty) {
+      tanggalLamar = _formatTanggal(
+        _data!['timeline'][_data!['timeline'].length - 1]['waktu'] ??
+            _data!['timeline'][_data!['timeline'].length - 1]['created_at'],
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
@@ -227,111 +381,161 @@ class TrackingTimelineScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Card (Info Pekerjaan)
-            _buildHeaderCard(),
-            const SizedBox(height: 30),
+      body: RefreshIndicator(
+        onRefresh: _fetchDetailLamaran,
+        color: AppColors.brownDark,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeaderCard(tanggalLamar),
+              const SizedBox(height: 30),
 
-            const Text(
-              "Tracking Timeline",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brownDark,
+              const Center(
+                child: Text(
+                  "Tracking Timeline",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brownDark,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 25),
+              const SizedBox(height: 25),
 
-            // Timeline List
-            _buildTimelineItem(
-              context: context,
-              title: "Lamaran Dikirim",
-              subtitle: "23 Maret 2026 - 10:50",
-              description:
-                  "Lamaran Anda telah berhasil diterima oleh tim rekrutmen $companyName.",
-              isLast: false,
-            ),
-            _buildTimelineItem(
-              context: context,
-              title: "Dalam Review",
-              subtitle: "23 Maret 2026 - 10:50",
-              description:
-                  "Tim HRD sedang meninjau portofolio dan pengalaman kerja Anda.",
-              isLast: false,
-            ),
-            _buildTimelineItem(
-              context: context,
-              title: "Lamaran Diterima",
-              subtitle: "24 Maret 2026 - 13:20",
-              description:
-                  "Lamaran anda lolos seleksi, selanjutnya tunggu informasi jadwal wawancara Anda.",
-              isLast: false,
-            ),
-            _buildTimelineItem(
-              context: context,
-              title: "Jadwal Wawancara",
-              subtitle: "25 Maret 2026 - 10:07",
-              description: "Anda diundang untuk sesi wawancara.",
-              isLast: true,
-              hasAction: true,
-            ),
-          ],
+              _timelineData.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 30),
+                      child: Center(
+                        child: Text(
+                          "Belum ada log log aktivitas timeline.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _timelineData.length,
+                      itemBuilder: (context, index) {
+                        final log = _timelineData[index];
+                        String statusLog = log['status'] ?? '';
+                        String keteranganLog = log['keterangan'] ?? '';
+
+                        String title = statusLog;
+                        String description = keteranganLog;
+                        bool hasAction = false;
+
+                        // MENYAMAKAN SISTEMATIKAL DENGAN BACKEND LARAVEL/REACT
+                        if (statusLog == 'Diproses') {
+                          title = 'Lamaran Dikirim';
+                          description =
+                              'Lamaran Anda telah berhasil diterima oleh tim rekrutmen ${_data!['nama_kafe'] ?? 'perusahaan'}.';
+                        } else if (statusLog == 'Dalam Review') {
+                          title = 'Dalam Review';
+                          description =
+                              'Tim HRD sedang meninjau portofolio dan pengalaman kerja Anda.';
+                        } else if (statusLog == 'Wawancara') {
+                          if (keteranganLog ==
+                              'Jadwal wawancara telah dibuat.') {
+                            title = 'Jadwal Wawancara';
+                            description = 'Anda diundang untuk sesi wawancara.';
+                            hasAction = true;
+                          } else {
+                            title = 'Lamaran Diterima';
+                            description =
+                                'Lamaran anda lolos seleksi, selanjutnya tunggu informasi jadwal wawancara Anda.';
+                            hasAction = false;
+                          }
+                        } else if (statusLog == 'Diterima') {
+                          title = 'Lamaran Diterima';
+                          description =
+                              'Selamat! Anda dinyatakan diterima. Silakan tunggu informasi lebih lanjut dari perusahaan.';
+                        } else if (statusLog == 'Ditolak') {
+                          title = 'Lamaran Tidak Diterima';
+                          description =
+                              'Terima kasih atas lamaran Anda. Mohon maaf, lamaran Anda belum dapat diproses ke tahap selanjutnya.';
+                        }
+
+                        return _buildTimelineItem(
+                          context: context,
+                          title: title,
+                          subtitle: _formatTanggal(
+                            log['waktu'] ?? log['created_at'],
+                            denganJam: true,
+                          ),
+                          description: description,
+                          isLast: index == _timelineData.length - 1,
+                          hasAction: hasAction,
+                        );
+                      },
+                    ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(String tanggalLamar) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.brownDark,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(25),
+        border: const Border(
+          bottom: BorderSide(color: Color(0xFFFBB041), width: 6),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                jobTitle,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _data?['posisi'] ?? '-',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Text(
-                companyName,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 14,
+                Text(
+                  _data?['nama_kafe'] ?? '-',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Dikirim pada 23 Maret 2026",
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 11,
+                const SizedBox(height: 6),
+                Text(
+                  "Dikirim pada $tanggalLamar",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 10),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.orangeAccent,
+              color: const Color(0xFFFBB041),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              status,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              _data?['status_saat_ini'] ?? _data?['status'] ?? '-',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Color(0xFF3D2722),
+              ),
             ),
           ),
         ],
@@ -350,52 +554,49 @@ class TrackingTimelineScreen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Indikator Titik dan Garis
         Column(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 45,
+              height: 45,
               decoration: const BoxDecoration(
                 color: AppColors.brownDark,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.coffee_rounded,
-                color: Colors.white,
+                color: Color(0xFFFBB041),
                 size: 20,
               ),
             ),
             if (!isLast)
-              Container(
-                width: 2,
-                height: 100, // Menyesuaikan panjang konten
-                color: AppColors.brownDark,
-              ),
+              Container(width: 3, height: 110, color: AppColors.brownDark),
           ],
         ),
         const SizedBox(width: 15),
-        // Konten Card Timeline
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(15),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
+                  color: const Color(0xFFFDF7F2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.5)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
+                      flex: 4,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -404,26 +605,28 @@ class TrackingTimelineScreen extends StatelessWidget {
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
+                              color: Color(0xFF3D2722),
                             ),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             subtitle,
-                            style: TextStyle(
-                              color: Colors.grey[600],
+                            style: const TextStyle(
+                              color: Colors.grey,
                               fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
-                      flex: 2,
+                      flex: 5,
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.brownDark.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.brownDark,
+                          borderRadius: BorderRadius.circular(15),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,26 +635,27 @@ class TrackingTimelineScreen extends StatelessWidget {
                               description,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 11,
+                                fontSize: 12,
+                                height: 1.3,
                               ),
                             ),
                             if (hasAction) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               ElevatedButton(
-                                // 🌟 DI SINI AKSI DIJALANKAN UNTUK MEMANGGIL POP-UP JADWAL
                                 onPressed: () => _showJadwalPopup(context),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orangeAccent,
-                                  minimumSize: const Size(double.infinity, 30),
+                                  backgroundColor: const Color(0xFFFBB041),
+                                  minimumSize: const Size(double.infinity, 32),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                                 child: const Text(
                                   "Lihat Jadwal",
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.black,
+                                    fontSize: 11,
+                                    color: Color(0xFF3D2722),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -464,7 +668,7 @@ class TrackingTimelineScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
+              const SizedBox(height: 20),
             ],
           ),
         ),

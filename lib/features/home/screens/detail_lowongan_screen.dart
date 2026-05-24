@@ -174,7 +174,7 @@ class DetailLowonganScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              perusahaan['tentang_perusahaan'] ??
+                              perusahaan['deskripsi'] ??
                                   "Perusahaan yang berdedikasi tinggi menciptakan ekosistem kerja inklusif untuk masa depan.",
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -253,11 +253,11 @@ class DetailLowonganScreen extends StatelessWidget {
                   ),
                   const Divider(color: AppColors.brownLight),
 
-                  // Menampilkan kualifikasi dari string data database secara fleksibel
-                  if (lowongan['kualifikasi'] != null &&
-                      lowongan['kualifikasi'].toString().isNotEmpty)
+                  // Menampilkan persyaratan dari string data database secara fleksibel
+                  if (lowongan['persyaratan'] != null &&
+                      lowongan['persyaratan'].toString().isNotEmpty)
                     Text(
-                      lowongan['kualifikasi'],
+                      lowongan['persyaratan'],
                       style: const TextStyle(
                         fontSize: 13,
                         height: 1.5,
@@ -265,7 +265,7 @@ class DetailLowonganScreen extends StatelessWidget {
                       ),
                     )
                   else ...[
-                    // Fallback bullets jika field kualifikasi database kosong
+                    // Fallback bullets jika field persyaratan database kosong
                     _buildBulletPoint(
                       "Pendidikan: Minimal SMA/K Sederajat atau Diploma/S1",
                     ),

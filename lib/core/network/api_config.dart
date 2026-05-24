@@ -46,8 +46,7 @@ class ApiConfig {
   // Endpoint Spesifik Mandiri untuk Pengalaman Kerja
   static const String pengalaman = "$baseUrl/pelamar/profil/pengalaman";
 
-  // Fitur Lowongan & Tracking
-  static const String jobs = '$baseUrl/jobs';
-  static const String trackingTimeline = '$baseUrl/tracking-timeline';
-  static const String detailJadwal = '$baseUrl/interview-schedule';
+  // Fitur Status Lamaran
+  static const String riwayatLamaran = "$baseUrl/pelamar/lamaran";
+  static String detailLamaran(int id) => "$baseUrl/pelamar/lamaran/$id";
 }
