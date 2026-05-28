@@ -289,12 +289,12 @@ class _LowonganScreenState extends State<LowonganScreen> {
                 color: const Color(0xFFFDF7F0),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: AppColors.cardOutline.withOpacity(0.5),
+                  color: AppColors.cardOutline.withValues(alpha: 0.5),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
+                    color: Colors.black.withValues(alpha: 0.02),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -389,7 +389,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: AppColors.brownLight.withOpacity(0.5),
+                      color: AppColors.brownLight.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ClipRRect(

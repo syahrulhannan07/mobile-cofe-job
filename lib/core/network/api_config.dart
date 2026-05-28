@@ -49,4 +49,13 @@ class ApiConfig {
   // Fitur Status Lamaran
   static const String riwayatLamaran = "$baseUrl/pelamar/lamaran";
   static String detailLamaran(int id) => "$baseUrl/pelamar/lamaran/$id";
+
+  // Endpoint HTTP Notifikasi
+  static const String notificationsEndpoint = '$baseUrl/notifikasi';
+  static const String broadcastingAuthEndpoint = '$baseUrl/broadcasting/auth';
+
+  // --- CONFIG REALTIME LARAVEL REVERB ---
+  static const String reverbAppKey = 'erxfm28nbnqhwl3yfqrh'; // Isi dengan PUSHER_APP_KEY / REVERB_APP_KEY backend Anda
+  static const String reverbHost = 'cofe-job.cicd.my.id';           // Ganti ke IP VPS jika sudah deploy
+  static const String reverbPort = '443';                // Port default Laravel Reverb
 }

@@ -647,7 +647,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -742,7 +742,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
-                                "Profil Pelamar",
+                                "Identitas Pribadi",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
@@ -815,7 +815,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   "Ceritakan singkat tentang diri Anda...",
                               filled: true,
                               fillColor: _isEditingMaster
-                                  ? AppColors.brownLight.withOpacity(0.2)
+                                  ? AppColors.brownLight.withValues(alpha: 0.2)
                                   : Colors.grey[100],
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1240,12 +1240,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: AppColors.brownLight.withOpacity(0.4)),
+        border: Border.all(color: AppColors.brownLight.withValues(alpha: 0.4)),
       ),
       child: Stack(
         children: [
@@ -1268,7 +1268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF635147).withOpacity(0.1),
+                color: const Color(0xFF635147).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Text(
@@ -1405,7 +1405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: controller.text.isEmpty ? null : controller.text,
+            initialValue: controller.text.isEmpty ? null : controller.text,
             items: items
                 .map(
                   (String val) =>

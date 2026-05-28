@@ -25,29 +25,39 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         var responseData = data['data'];
 
-        // Mengambil token dari data (berdasarkan log Anda)
+        // Mengambil token dari data
         String? token = responseData != null
             ? responseData['token']?.toString()
             : null;
 
         if (token != null) {
-          // 1. Simpan Token
+          var userProfile = responseData['pengguna'] ?? {};
+
+          // 1. Simpan Token dengan key 'auth_token' (Sinkron dengan NotificationScreen)
           await prefs.setString("token", token);
 
           // 2. Set isLoggedIn agar main.dart langsung mengarah ke beranda
           await prefs.setBool("isLoggedIn", true);
 
-          await prefs.setString(
-            "user_name",
-            responseData['pengguna']['nama_pengguna'],
-          );
+          // 3. Simpan user_id sebagai int untuk WebSocket Reverb
+          if (userProfile['id_pengguna'] != null) {
+            int? idInt = int.tryParse(userProfile['id_pengguna'].toString());
+            if (idInt != null) {
+              await prefs.setInt("user_id", idInt);
+            }
+          }
 
-          // 3. Ambil data profil (menggunakan key 'pengguna' sesuai log server)
-          var userProfile = responseData['pengguna'] ?? {};
+          // 4. Simpan data profil pendukung lainnya
+          await prefs.setString("user_name", userProfile['nama_pengguna'] ?? '');
+          await prefs.setString("userName", userProfile['nama_pengguna'] ?? '');
+          await prefs.setString("userEmail", userProfile['email'] ?? '');
+          await prefs.setString("userRole", userProfile['peran'] ?? '');
 
+          // PERBAIKAN: Masukkan token ke dalam return agar dibaca oleh login_screen
           return {
             "status": true,
             "message": data["message"] ?? "Login Berhasil",
+            "token": token,
             "user": userProfile,
           };
         } else {

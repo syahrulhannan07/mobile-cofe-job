@@ -114,7 +114,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -291,7 +291,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -305,7 +305,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: AppColors.brownLight.withOpacity(0.3),
+                color: AppColors.brownLight.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ClipRRect(

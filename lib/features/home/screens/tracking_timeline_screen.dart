@@ -507,7 +507,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                 Text(
                   _data?['nama_kafe'] ?? '-',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 15,
                   ),
                 ),
@@ -515,7 +515,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                 Text(
                   "Dikirim pada $tanggalLamar",
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 12,
                   ),
                 ),
@@ -583,10 +583,10 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFFDF7F2),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.5)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),

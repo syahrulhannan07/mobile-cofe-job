@@ -213,7 +213,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                                 userEducation,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.textMain.withOpacity(0.8),
+                                  color: AppColors.textMain.withValues(alpha: 0.8),
                                 ),
                               ),
                             ],
@@ -366,11 +366,11 @@ class _BerandaScreenState extends State<BerandaScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 5. Section Perusahaan Terbaru
+                    // 5. Section Temukan Perusahaan
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 20),
                       child: Text(
-                        "Perusahaan Terbaru",
+                        "Temukan Perusahaan",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -524,7 +524,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -542,7 +542,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                   child: Container(
                     width: 46,
                     height: 46,
-                    color: AppColors.brownLight.withOpacity(0.25),
+                    color: AppColors.brownLight.withValues(alpha: 0.25),
                     child: logoUrl != null && logoUrl.isNotEmpty
                         ? Image.network(
                             logoUrl,
@@ -649,7 +649,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.brownLight.withOpacity(0.3),
+                    color: AppColors.brownLight.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -691,7 +691,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -705,7 +705,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
               child: Container(
                 width: 60,
                 height: 60,
-                color: AppColors.brownLight.withOpacity(0.3),
+                color: AppColors.brownLight.withValues(alpha: 0.3),
                 child: logoUrl != null && logoUrl.isNotEmpty
                     ? Image.network(
                         logoUrl,
@@ -779,7 +779,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMain.withOpacity(0.7),
+                      color: AppColors.textMain.withValues(alpha: 0.7),
                       height: 1.4,
                     ),
                   ),

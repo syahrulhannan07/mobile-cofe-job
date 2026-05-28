@@ -118,7 +118,7 @@ class TutorialScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.brownLight,
                   borderRadius: BorderRadius.circular(30),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
                 ),
                 child: Stack(
                   alignment: Alignment.center,
@@ -163,7 +163,7 @@ class TutorialScreen extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: (step['gradient'][0] as Color).withOpacity(0.3),
+                          color: (step['gradient'][0] as Color).withValues(alpha: 0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),

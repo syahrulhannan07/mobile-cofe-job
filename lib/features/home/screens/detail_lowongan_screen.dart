@@ -217,7 +217,7 @@ class DetailLowonganScreen extends StatelessWidget {
                 color: const Color(0xFFFDF7F0),
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(
-                  color: AppColors.brownLight.withOpacity(0.5),
+                  color: AppColors.brownLight.withValues(alpha: 0.5),
                 ),
               ),
               child: Column(

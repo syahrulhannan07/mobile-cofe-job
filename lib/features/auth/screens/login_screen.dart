@@ -21,10 +21,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
-  // Menyimpan session login hanya jika peran adalah 'Pelamar'
-  Future<void> _saveLoginSession(Map<String, dynamic> userData) async {
+  // Menyimpan session login secara lengkap & sinkron
+  Future<void> _saveLoginSession(Map<String, dynamic> userData, String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', true);
+    await prefs.setString('token', token);
+    
+    if (userData['id_pengguna'] != null) {
+      int? idInt = int.tryParse(userData['id_pengguna'].toString());
+      if (idInt != null) {
+        await prefs.setInt('user_id', idInt);
+      }
+    }
+    
     await prefs.setString('userEmail', userData['email'] ?? '');
     await prefs.setString('userName', userData['nama_pengguna'] ?? '');
     await prefs.setString('userRole', userData['peran'] ?? '');
@@ -49,13 +58,20 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (result["status"] == true) {
-        // AMBIL DATA USER DARI RESPONSE BACKEND
         final userData = result["user"]; 
+        final String token = result["token"] ?? "";
+
+        // Validasi pengaman jika token gagal dilemparkan dari AuthService
+        if (userData == null || token.isEmpty) {
+          _showMessage("Gagal memproses data session dari server.", isError: true);
+          return;
+        }
+
         final String peran = userData["peran"] ?? "";
 
         // VALIDASI AKTOR: Hanya Pelamar yang boleh masuk ke Mobile App
         if (peran == "Pelamar") {
-          await _saveLoginSession(userData);
+          await _saveLoginSession(userData, token);
 
           _showMessage("Login berhasil! Selamat datang", isError: false);
 
@@ -64,7 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
             MaterialPageRoute(builder: (context) => const MainLayout()),
           );
         } else {
-          // Jika aktor adalah Admin_Perusahaan atau Super_Admin
           _showMessage(
             "Akses ditolak. Akun Anda terdaftar sebagai $peran. Silakan login melalui Website.", 
             isError: true
@@ -85,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Text(message),
         backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4), // Durasi sedikit lebih lama agar pesan terbaca
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -139,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "Masuk dan Temukan Career Impian Anda", // Memberi info tambahan di UI
+                    "Masuk dan Temukan Career Impian Anda",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,

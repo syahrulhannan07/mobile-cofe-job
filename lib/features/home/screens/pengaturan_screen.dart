@@ -147,7 +147,7 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
                             _isNotificationActive = val;
                           });
                         },
-                        activeColor: AppColors.buttonMain,
+                        activeThumbColor: AppColors.buttonMain,
                       ),
                     ),
 

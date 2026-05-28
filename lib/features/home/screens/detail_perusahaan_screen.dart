@@ -66,7 +66,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -84,7 +84,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.brownLight.withOpacity(0.4),
+                          color: AppColors.brownLight.withValues(alpha: 0.4),
                           blurRadius: 15,
                           spreadRadius: 2,
                           offset: const Offset(0, 5),
@@ -94,7 +94,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(4), // Border effect
                     child: ClipOval(
                       child: Container(
-                        color: AppColors.brownLight.withOpacity(0.1),
+                        color: AppColors.brownLight.withValues(alpha: 0.1),
                         child: logoUrl != null && logoUrl.isNotEmpty
                             ? Image.network(
                                 logoUrl,
@@ -165,7 +165,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.withOpacity(0.15)),
+                  border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
                 ),
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -176,7 +176,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: AppColors.brownLight.withOpacity(0.2),
+                            color: AppColors.brownLight.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -201,7 +201,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                       desc,
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textMain.withOpacity(0.75),
+                        color: AppColors.textMain.withValues(alpha: 0.75),
                         height: 1.6,
                       ),
                     ),
@@ -232,7 +232,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: activeJobs.isNotEmpty
-                          ? AppColors.brownLight.withOpacity(0.2)
+                          ? AppColors.brownLight.withValues(alpha: 0.2)
                           : Colors.grey[200],
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -266,7 +266,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.grey.withOpacity(0.1),
+                                  color: Colors.grey.withValues(alpha: 0.1),
                                   blurRadius: 10,
                                   spreadRadius: 2,
                                 )
@@ -333,10 +333,10 @@ class DetailPerusahaanScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -346,7 +346,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          splashColor: AppColors.brownLight.withOpacity(0.1),
+          splashColor: AppColors.brownLight.withValues(alpha: 0.1),
           highlightColor: Colors.transparent,
           onTap: () {
             // Membungkus kembali data perusahaan induk ke dalam object lowongan
@@ -410,7 +410,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                                     salary == "Gaji Dirahasiakan"
                                 ? salary
                                 : "Rp $salary",
-                            bgColor: AppColors.brownLight.withOpacity(0.15),
+                            bgColor: AppColors.brownLight.withValues(alpha: 0.15),
                             textColor: AppColors.brownDark,
                           ),
                         ],
@@ -423,7 +423,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.brownLight.withOpacity(0.1),
+                    color: AppColors.brownLight.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -459,7 +459,7 @@ class DetailPerusahaanScreen extends StatelessWidget {
           Icon(
             icon,
             size: 14,
-            color: textColor.withOpacity(0.8),
+            color: textColor.withValues(alpha: 0.8),
           ),
           const SizedBox(width: 4),
           Text(
