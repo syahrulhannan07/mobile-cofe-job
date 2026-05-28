@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:laravel_echo/laravel_echo.dart';
-import 'package:pusher_client/pusher_client.dart';
 import '../../../core/network/api_config.dart';
+
+// REKOMENDASI: Gunakan package murni Dart seperti 'pusher_client_fixed' atau custom WebSocket 
+// agar terhindar dari error Namespace Android di GitHub Actions.
+import 'package:pusher_client/pusher_client.dart'; 
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -18,7 +21,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _isLoading = true;
   String? _errorMessage; 
   
-  PusherClient? _pusher;
+  PusherClient? _pusher; 
   Echo? _echo;
   int? _userId;
 
@@ -110,12 +113,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
     try {
       final int port = int.tryParse(ApiConfig.reverbPort) ?? 80;
 
+      // Konfigurasi opsi opsi untuk kustom Host & Port (Laravel Reverb)
       PusherOptions options = PusherOptions(
         host: ApiConfig.reverbHost,
         wsPort: port,
         wssPort: port,
-        encrypted: false, 
-        cluster: 'mt1', 
+        encrypted: false, // Set ke true jika menggunakan HTTPS/WSS
         auth: PusherAuth(
           ApiConfig.broadcastingAuthEndpoint,
           headers: {
@@ -125,7 +128,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
-      _pusher = PusherClient(ApiConfig.reverbAppKey, options, autoConnect: false);
+      _pusher = PusherClient(
+        ApiConfig.reverbAppKey,
+        options,
+        autoConnect: false,
+      );
+
+      _echo = Echo(
+        broadcaster: EchoBroadcasterType.Pusher,
+        client: _pusher,
+      );
+
+      _pusher!.connect();
 
       _pusher!.onConnectionStateChange((state) {
         debugPrint("🔌 [Reverb Status]: ${state?.currentState}");
@@ -135,13 +149,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
         debugPrint("❌ [Reverb Error]: ${error?.message}");
       });
 
-      await _pusher!.connect();
-
-      _echo = Echo(
-        broadcaster: EchoBroadcasterType.Pusher,
-        client: _pusher,
-      );
-
       // Mendengarkan channel private notification user
       _echo!.private('App.Models.User.$_userId')
             .listen('.Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (dynamic event) {
@@ -150,13 +157,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
         
         final Map<String, dynamic> incoming = Map<String, dynamic>.from(event);
 
-        // Menyesuaikan penangkapan data real-time broadcast dari Laravel
         final String judulRealtime = incoming['judul'] ?? incoming['title'] ?? 'Pemberitahuan Baru';
         final String pesanRealtime = incoming['pesan'] ?? incoming['message'] ?? 'Ada lowongan baru tersedia.';
 
         if (mounted) {
           setState(() {
-            // Masukkan data baru ke urutan paling atas list secara real-time
             _notifications.insert(0, {
               'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch,
               'judul': judulRealtime,
@@ -166,7 +171,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
             });
           });
 
-          // Munculkan SnackBer di dalam aplikasi secara langsung
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("$judulRealtime\n$pesanRealtime"),
@@ -220,7 +224,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           itemBuilder: (context, index) {
                             final notif = _notifications[index];
                             
-                            // 🛠️ FIX UTAMA: Membaca langsung sesuai log JSON asli Anda
                             final String displayJudul = notif['judul'] ?? 'Pemberitahuan';
                             final String displayPesan = notif['pesan'] ?? 'Detail pemberitahuan kosong.';
 
