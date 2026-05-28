@@ -7,7 +7,7 @@ import '../../../core/network/api_config.dart';
 
 // REKOMENDASI: Gunakan package murni Dart seperti 'pusher_client_fixed' atau custom WebSocket 
 // agar terhindar dari error Namespace Android di GitHub Actions.
-import 'package:pusher_client/pusher_client.dart'; 
+import 'package:pusher_client_fixed/pusher_client_fixed.dart'; 
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
