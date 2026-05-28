@@ -14,14 +14,13 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-subprojects {
-    project.evaluationDependsOn(":app")
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            if (project.android.namespace == null) {
-                // Menyuntikkan namespace otomatis berdasarkan nama package/plugin secara dinamis
-                project.android.namespace = "com.cofejob.${project.name.replaceAll(/[^a-zA-Z0-9_]/, '_')}"
+    afterEvaluate {
+        if (hasProperty("android")) {
+            val androidExtension = property("android") as? com.android.build.gradle.BaseExtension
+            if (androidExtension != null && androidExtension.namespace == null) {
+                // Mengganti karakter selain huruf, angka, dan underscore dengan '_' khas Kotlin
+                val cleanName = name.replace(Regex("[^a-zA-Z0-9_]"), "_")
+                androidExtension.namespace = "com.cofejob.$cleanName"
             }
         }
     }
