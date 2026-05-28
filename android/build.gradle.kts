@@ -17,6 +17,14 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            if (project.android.namespace == null) {
+                // Menyuntikkan namespace otomatis berdasarkan nama package/plugin secara dinamis
+                project.android.namespace = "com.cofejob.${project.name.replaceAll(/[^a-zA-Z0-9_]/, '_')}"
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
