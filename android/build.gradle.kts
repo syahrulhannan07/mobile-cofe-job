@@ -14,15 +14,30 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
+
     afterEvaluate {
         if (hasProperty("android")) {
             val androidExtension = property("android") as? com.android.build.gradle.BaseExtension
-            if (androidExtension != null && androidExtension.namespace == null) {
-                // Mengganti karakter selain huruf, angka, dan underscore dengan '_' khas Kotlin
-                val cleanName = name.replace(Regex("[^a-zA-Z0-9_]"), "_")
-                androidExtension.namespace = "com.cofejob.$cleanName"
+            if (androidExtension != null) {
+                // 1. Solusi Batasan Namespace (Pusher Client Fix Lama)
+                if (androidExtension.namespace == null) {
+                    val cleanName = name.replace(Regex("[^a-zA-Z0-9_]"), "_")
+                    androidExtension.namespace = "com.cofejob.$cleanName"
+                }
+
+                // 2. Solusi JVM Target: Menyelaraskan Android Compile Options ke Java 17
+                androidExtension.compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
             }
         }
+    }
+
+    // 3. Solusi JVM Target: Menyelaraskan seluruh Java Tasks ke Java 17 agar cocok dengan task Kotlin (17)
+    tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
     }
 }
 
