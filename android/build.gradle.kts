@@ -19,11 +19,14 @@ subprojects {
         if (hasProperty("android")) {
             val androidExtension = property("android") as? com.android.build.gradle.BaseExtension
             if (androidExtension != null) {
-                // 1. Solusi Batasan Namespace (Pusher Client Fix Lama)
+                // 1. Solusi Batasan Namespace
                 if (androidExtension.namespace == null) {
                     val cleanName = name.replace(Regex("[^a-zA-Z0-9_]"), "_")
                     androidExtension.namespace = "com.cofejob.$cleanName"
                 }
+
+                // 🛠️ PERBAIKAN UTAMA: Paksa compileSdkVersion ke 34 agar mendukung kompilasi Java 17
+                androidExtension.compileSdkVersion(34)
 
                 // 2. Solusi JVM Target: Menyelaraskan Android Compile Options ke Java 17
                 androidExtension.compileOptions {
@@ -34,7 +37,7 @@ subprojects {
         }
     }
 
-    // 3. Solusi JVM Target: Menyelaraskan seluruh Java Tasks ke Java 17 agar cocok dengan task Kotlin (17)
+    // 3. Solusi JVM Target: Menyelaraskan seluruh Java Tasks ke Java 17
     tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
         sourceCompatibility = "17"
         targetCompatibility = "17"
