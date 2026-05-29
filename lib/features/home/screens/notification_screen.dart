@@ -2,12 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:laravel_echo/laravel_echo.dart';
 import '../../../core/network/api_config.dart';
-
-// REKOMENDASI: Gunakan package murni Dart seperti 'pusher_client_fixed' atau custom WebSocket 
-// agar terhindar dari error Namespace Android di GitHub Actions.
-import 'package:pusher_client/pusher_client.dart'; 
+import 'package:pusher_client_fixed/pusher_client_fixed.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -21,8 +17,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _isLoading = true;
   String? _errorMessage; 
   
-  PusherClient? _pusher; 
-  Echo? _echo;
+  // 🔥 Menggunakan objek milik pusher_client_fixed
+  PusherClient? _pusher;
+  Channel? _channel;
   int? _userId;
 
   @override
@@ -33,16 +30,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   @override
   void dispose() {
-    if (_userId != null && _echo != null) {
+    _cleanupWebsocket();
+    super.dispose();
+  }
+
+  // Membersihkan koneksi websocket saat keluar dari halaman
+  void _cleanupWebsocket() {
+    if (_userId != null) {
+      final String channelName = "private-App.Models.User.$_userId";
       try {
-        _echo!.private('App.Models.User.$_userId')
-              .stopListening('.Illuminate\\Notifications\\Events\\BroadcastNotificationCreated');
+        if (_pusher != null && _channel != null) {
+          _pusher!.unsubscribe(channelName);
+        }
+        _pusher?.disconnect();
+        debugPrint("🔌 [Reverb]: Berhasil disconnect dan unsubscribe.");
       } catch (e) {
-        debugPrint("❌ Error stop listening: $e");
+        debugPrint("❌ Error closing pusher: $e");
       }
     }
-    _pusher?.disconnect();
-    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -54,7 +59,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await _initRealtimeWebsocket();
   }
 
-  // 1. MEMBUAT HISTORI NOTIFIKASI DARI API
+  // 1. MEMBUAT HISTORI NOTIFIKASI DARI API REST
   Future<void> _fetchNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -97,7 +102,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  // 2. MENGAKTIFKAN WEBSOCKET REAL-TIME UNTUK LOWONGAN BARU
+  // 2. MENGAKTIFKAN WEBSOCKET REAL-TIME LANGSUNG KE LARAVEL REVERB
   Future<void> _initRealtimeWebsocket() async {
     if (_errorMessage != null) return;
 
@@ -112,13 +117,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
     try {
       final int port = int.tryParse(ApiConfig.reverbPort) ?? 80;
+      final String targetChannel = "private-App.Models.User.$_userId";
 
-      // Konfigurasi opsi opsi untuk kustom Host & Port (Laravel Reverb)
+      // Konfigurasi opsi Reverb didukung penuh oleh penulisan PusherOptions ini
       PusherOptions options = PusherOptions(
         host: ApiConfig.reverbHost,
         wsPort: port,
         wssPort: port,
-        encrypted: false, // Set ke true jika menggunakan HTTPS/WSS
+        encrypted: false, // Set true jika server VPS sudah menggunakan SSL (WSS)
         auth: PusherAuth(
           ApiConfig.broadcastingAuthEndpoint,
           headers: {
@@ -128,18 +134,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
+      // Inisialisasi instansi PusherClient baru
       _pusher = PusherClient(
         ApiConfig.reverbAppKey,
         options,
         autoConnect: false,
       );
 
-      _echo = Echo(
-        broadcaster: EchoBroadcasterType.Pusher,
-        client: _pusher,
-      );
-
-      _pusher!.connect();
+      // Menghubungkan ke server Laravel Reverb
+      await _pusher!.connect();
 
       _pusher!.onConnectionStateChange((state) {
         debugPrint("🔌 [Reverb Status]: ${state?.currentState}");
@@ -149,39 +152,50 @@ class _NotificationScreenState extends State<NotificationScreen> {
         debugPrint("❌ [Reverb Error]: ${error?.message}");
       });
 
-      // Mendengarkan channel private notification user
-      _echo!.private('App.Models.User.$_userId')
-            .listen('.Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (dynamic event) {
-        
-        debugPrint("🔥 NOTIFIKASI REAL-TIME MASUK: $event");
-        
-        final Map<String, dynamic> incoming = Map<String, dynamic>.from(event);
+      // Mendaftar masuk ke private channel user
+      _channel = _pusher!.subscribe(targetChannel);
 
-        final String judulRealtime = incoming['judul'] ?? incoming['title'] ?? 'Pemberitahuan Baru';
-        final String pesanRealtime = incoming['pesan'] ?? incoming['message'] ?? 'Ada lowongan baru tersedia.';
+      // Mendengarkan event notifikasi bawaan back-end Laravel
+      _channel!.bind('Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (PusherEvent? event) {
+        if (event == null || event.data == null) return;
+        
+        debugPrint("🔥 DATA NOTIFIKASI VALID MASUK: ${event.data}");
+        
+        try {
+          // Mengubah data string mentah menjadi Map JSON
+          final Map<String, dynamic> incoming = json.decode(event.data!);
 
-        if (mounted) {
-          setState(() {
-            _notifications.insert(0, {
-              'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch,
-              'judul': judulRealtime,
-              'pesan': pesanRealtime,
-              'dibaca': false,
-              'dibuat_pada': DateTime.now().toIso8601String(),
+          final String judulRealtime = incoming['judul'] ?? incoming['title'] ?? 'Pemberitahuan Baru';
+          final String pesanRealtime = incoming['pesan'] ?? incoming['message'] ?? 'Ada lowongan baru tersedia.';
+
+          if (mounted) {
+            setState(() {
+              // Menyisipkan data baru ke baris paling atas List
+              _notifications.insert(0, {
+                'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch,
+                'judul': judulRealtime,
+                'pesan': pesanRealtime,
+                'dibaca': false,
+                'dibuat_pada': DateTime.now().toIso8601String(),
+              });
             });
-          });
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("$judulRealtime\n$pesanRealtime"),
-              backgroundColor: const Color(0xFF635147),
-            ),
-          );
+            // Tampilkan snackbar pemberitahuan pop-up
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("$judulRealtime\n$pesanRealtime"),
+                backgroundColor: const Color(0xFF635147),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint("❌ Gagal parsing JSON data event: $e");
         }
       });
 
     } catch (e) {
-      debugPrint("❌ Gagal inisialisasi real-time (Exception): $e");
+      debugPrint("❌ Gagal inisialisasi pusher_client (Exception): $e");
     }
   }
 
