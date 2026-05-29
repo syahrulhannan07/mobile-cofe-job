@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/network/api_config.dart';
-import 'package:pusher_client_fixed/pusher_client_fixed.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 IMPORT REPLACEMENT: Menggunakan FCM menggantikan Pusher
+import 'dart:async';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -17,9 +18,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _isLoading = true;
   String? _errorMessage; 
   
-  PusherClient? _pusher;
-  Channel? _channel;
-  int? _userId;
+  // StreamSubscription untuk mendengarkan real-time message stream FCM
+  StreamSubscription<RemoteMessage>? _fcmSubscription;
 
   @override
   void initState() {
@@ -29,24 +29,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   @override
   void dispose() {
-    _cleanupWebsocket();
+    // 🔌 Membersihkan stream listener FCM saat keluar dari halaman agar tidak terjadi memory leak
+    _fcmSubscription?.cancel();
     super.dispose();
-  }
-
-  // Membersihkan koneksi websocket saat keluar dari halaman agar tidak memory leak
-  void _cleanupWebsocket() {
-    if (_userId != null) {
-      final String channelName = "private-App.Models.User.$_userId";
-      try {
-        if (_pusher != null && _channel != null) {
-          _pusher!.unsubscribe(channelName);
-        }
-        _pusher?.disconnect();
-        debugPrint("🔌 [Reverb]: Berhasil disconnect dan unsubscribe.");
-      } catch (e) {
-        debugPrint("❌ Error closing pusher: $e");
-      }
-    }
   }
 
   Future<void> _loadInitialData() async {
@@ -55,10 +40,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
       _errorMessage = null;
     });
     await _fetchNotifications();
-    await _initRealtimeWebsocket();
+    await _initFirebaseMessaging();
   }
 
-  // 1. MENGAMBIL HISTORI NOTIFIKASI DARI API DATABASE (REST API)
+  // 1. MENGAMBIL HISTORI NOTIFIKASI DARI REST API BACKEND
   Future<void> _fetchNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -82,14 +67,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        final List<dynamic> rawList = data['data'] ?? [];
+        
+        // 🛡️ SOLUSI 1: Bersihkan duplikasi yang berasal dari Database Rest API
+        final List<dynamic> uniqueList = [];
+        final Set<String> seenFingerprints = {};
+
+        for (var item in rawList) {
+          String judul = item['judul'] ?? 'Pemberitahuan';
+          String pesan = item['pesan'] ?? '';
+          String fingerprint = "${judul}_$pesan".trim();
+
+          if (!seenFingerprints.contains(fingerprint)) {
+            seenFingerprints.add(fingerprint);
+            uniqueList.add(item);
+          }
+        }
+
         setState(() {
-          _notifications = data['data'] ?? [];
+          _notifications = uniqueList;
           _errorMessage = null;
           _isLoading = false;
         });
       } else {
         setState(() {
-          _errorMessage = "Gagal memuat data dari server (Status: ${response.statusCode})";
+          _errorMessage = "Gagal memuat data server (Status: ${response.statusCode})";
           _isLoading = false;
         });
       }
@@ -101,154 +103,153 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  // 2. MENDENGARKAN WEBSOCKET REAL-TIME DARI 6 NOTIFIKASI BACKEND LARAVEL REVERB
-  Future<void> _initRealtimeWebsocket() async {
+  // 2. MENDENGARKAN REAL-TIME NOTIFIKASI MENGGUNAKAN FIREBASE CLOUD MESSAGING (FCM)
+  Future<void> _initFirebaseMessaging() async {
     if (_errorMessage != null) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    _userId = prefs.getInt('user_id'); 
-
-    if (token == null || _userId == null) {
-      debugPrint("⚠️ Websocket dibatalkan: Token atau User ID NULL!");
-      return;
-    }
-
     try {
-      final int port = int.tryParse(ApiConfig.reverbPort) ?? 80;
-      final String targetChannel = "private-App.Models.User.$_userId";
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-      // Konfigurasi opsi Reverb menggunakan PusherOptions
-      PusherOptions options = PusherOptions(
-        host: ApiConfig.reverbHost,
-        wsPort: port,
-        wssPort: port,
-        encrypted: false, // Set menjadi true jika server produksi VPS Anda menggunakan HTTPS/WSS
-        auth: PusherAuth(
-          ApiConfig.broadcastingAuthEndpoint,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
+      // 🔐 Meminta Izin Notifikasi (Sangat Penting untuk Android 13+ dan iOS)
+      NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
       );
 
-      // Inisialisasi instansi PusherClient
-      _pusher = PusherClient(
-        ApiConfig.reverbAppKey,
-        options,
-        autoConnect: false,
-      );
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        debugPrint("🚫 [FCM]: Izin notifikasi ditolak oleh pengguna.");
+        return;
+      }
 
-      // Menghubungkan ke server Laravel Reverb
-      await _pusher!.connect();
+      // 📩 Menangkap Notifikasi Real-time saat aplikasi sedang menyala/aktif (Foreground)
+      _fcmSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint("📩 [FCM Foreground]: Pesan masuk masuk dengan ID: ${message.messageId}");
 
-      _pusher!.onConnectionStateChange((state) {
-        debugPrint("🔌 [Reverb Status]: ${state?.currentState}");
-      });
+        // Ekstraksi data payload dari Laravel Notification Framework yang dikirim via FCM
+        String judulRealtime = 'Pemberitahuan Baru';
+        String pesanRealtime = '';
 
-      _pusher!.onConnectionError((error) {
-        debugPrint("❌ [Reverb Error]: ${error?.message}");
-      });
+        // Deteksi payload tipe "notification" bawaan atau tipe custom payload "data"
+        if (message.notification != null) {
+          judulRealtime = message.notification!.title ?? 'Pemberitahuan Baru';
+          pesanRealtime = message.notification!.body ?? '';
+        } else if (message.data.isNotEmpty) {
+          judulRealtime = message.data['judul'] ?? message.data['title'] ?? 'Pemberitahuan Baru';
+          pesanRealtime = message.data['pesan'] ?? message.data['message'] ?? '';
+        }
 
-      // Mendaftar masuk ke private channel user
-      _channel = _pusher!.subscribe(targetChannel);
+        final String currentFingerprint = "${judulRealtime}_$pesanRealtime".trim();
 
-      // Mendengarkan event notifikasi bawaan back-end Laravel (Menangani ke-6 kelas notifikasi sekaligus)
-      _channel!.bind('Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (PusherEvent? event) {
-        if (event == null || event.data == null) return;
+        // 🛡️ SOLUSI 2: Cocokkan fingerprint data baru dengan data yang sudah tampil di layar (Anti-Double Binding)
+        final bool isDuplicate = _notifications.any((notif) {
+          String existingJudul = notif['judul'] ?? '';
+          String existingPesan = notif['pesan'] ?? '';
+          return "${existingJudul}_$existingPesan".trim() == currentFingerprint;
+        });
         
-        debugPrint("🔥 DATA NOTIFIKASI VALID MASUK: ${event.data}");
-        
-        try {
-          // Mengubah data string mentah menjadi Map JSON
-          final Map<String, dynamic> incoming = json.decode(event.data!);
+        if (isDuplicate) {
+          debugPrint("🛡️ [FCM Filter]: Berhasil memblokir data duplikat di layar UI: $judulRealtime");
+          return; 
+        }
 
-          // Sinkronisasi dengan key 'judul' & 'pesan' dari payload toBroadcast() Laravel kamu
-          final String judulRealtime = incoming['judul'] ?? 'Pemberitahuan Baru';
-          final String pesanRealtime = incoming['pesan'] ?? 'Ada pembaruan status lamaran terbaru.';
-
-          if (mounted) {
-            setState(() {
-              // Menyisipkan data baru ke baris paling atas List agar langsung terlihat
-              _notifications.insert(0, {
-                'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                'judul': judulRealtime,
-                'pesan': pesanRealtime,
-                'dibaca': false,
-                'dibuat_pada': incoming['created_at'] ?? DateTime.now().toIso8601String(),
-              });
+        if (mounted) {
+          setState(() {
+            // Masukkan data baru ke baris paling atas List Notifikasi secara real-time
+            _notifications.insert(0, {
+              'id': message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+              'judul': judulRealtime,
+              'pesan': pesanRealtime,
+              'dibaca': false,
+              'dibuat_pada': DateTime.now().toIso8601String(),
             });
+          });
 
-            // Tampilkan snackbar pop-up interaktif di dalam aplikasi saat itu juga
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.notifications_active, color: Color(0xFFF0B85E)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(judulRealtime, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                          Text(pesanRealtime, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                        ],
-                      ),
+          // 🔥 POP UP REAL-TIME: Snack Bar Melayang Elegan saat aplikasi aktif
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: Color(0xFFF0B85E)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "$judulRealtime: $pesanRealtime",
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                     ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF635147),
-                duration: const Duration(seconds: 4),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ],
               ),
-            );
-          }
-        } catch (e) {
-          debugPrint("❌ Gagal parsing JSON data event: $e");
+              backgroundColor: const Color(0xFF422E26),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              duration: const Duration(seconds: 4),
+            ),
+          );
         }
       });
 
     } catch (e) {
-      debugPrint("❌ Gagal inisialisasi pusher_client (Exception): $e");
+      debugPrint("❌ Error Exception FCM Initialization: $e");
+    }
+  }
+
+  String _formatTime(String? dateStr) {
+    if (dateStr == null) return "Baru saja";
+    try {
+      final dateTime = DateTime.parse(dateStr).toLocal();
+      return "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+    } catch (_) {
+      return "Baru saja";
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F8F6),
       appBar: AppBar(
-        title: const Text("Notifikasi", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Notifikasi", 
+          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        centerTitle: true,
         backgroundColor: const Color(0xFF422E26),
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          if (!_isLoading && _errorMessage == null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _fetchNotifications,
-              tooltip: "Segarkan",
-            )
-        ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF422E26))))
           : _errorMessage != null
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(32.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        Text(_errorMessage!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadInitialData,
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF422E26)),
-                          child: const Text("Coba Lagi", style: TextStyle(color: Colors.white)),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: const BoxDecoration(color: Color(0xFFFDECEB), shape: BoxShape.circle),
+                          child: const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.redAccent),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: 160,
+                          height: 42,
+                          child: ElevatedButton(
+                            onPressed: _loadInitialData,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF422E26),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              elevation: 0,
+                            ),
+                            child: const Text("Coba Lagi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
                         )
                       ],
                     ),
@@ -256,43 +257,115 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: _fetchNotifications, 
+                  color: const Color(0xFF422E26),
                   child: _notifications.isEmpty
-                      ? const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.notifications_off_outlined, size: 64, color: Colors.grey),
-                              SizedBox(height: 8),
-                              Text("Tidak ada notifikasi", style: TextStyle(color: Colors.grey)),
-                            ],
-                          ),
+                      ? ListView(
+                          children: [
+                            SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                            Center(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+                                    child: Icon(Icons.notifications_none_rounded, size: 64, color: Colors.grey.shade400),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text("Belum Ada Notifikasi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF422E26))),
+                                  const SizedBox(height: 6),
+                                  Text("Info lowongan & lamaran terbaru Anda akan muncul di sini.", style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                                ],
+                              ),
+                            ),
+                          ],
                         )
                       : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                           itemCount: _notifications.length,
                           itemBuilder: (context, index) {
                             final notif = _notifications[index];
-                            
                             final String displayJudul = notif['judul'] ?? 'Pemberitahuan';
-                            final String displayPesan = notif['pesan'] ?? 'Detail pemberitahuan kosong.';
+                            final String displayPesan = notif['pesan'] ?? 'Detail pemberitahuan.';
+                            final bool dibaca = notif['dibaca'] ?? true; 
 
-                            return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                leading: const CircleAvatar(
-                                  backgroundColor: Color(0xFFFFF4E6),
-                                  child: Icon(Icons.notifications_active, color: Color(0xFFF0B85E)),
-                                ),
-                                title: Text(
-                                  displayJudul,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF422E26)),
-                                ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  // Mendukung pesan multi-line jika pesan dari HRD cukup panjang
-                                  child: Text(displayPesan, style: const TextStyle(color: Colors.black87)),
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.03),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  )
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  color: dibaca ? Colors.white : const Color(0xFFFFFBEF),
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: dibaca ? const Color(0xFFF5F5F5) : const Color(0xFFFFF4E6),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.work_outline_rounded, 
+                                          size: 20, 
+                                          color: dibaca ? Colors.grey : const Color(0xFFF0B85E)
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    displayJudul,
+                                                    style: TextStyle(
+                                                      fontWeight: dibaca ? FontWeight.w600 : FontWeight.bold, 
+                                                      fontSize: 14,
+                                                      color: const Color(0xFF422E26)
+                                                    ),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  _formatTime(notif['dibuat_pada'] ?? notif['created_at']),
+                                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              displayPesan,
+                                              style: TextStyle(
+                                                fontSize: 13, 
+                                                color: dibaca ? Colors.black54 : Colors.black87,
+                                                height: 1.3
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!dibaca)
+                                        Container(
+                                          margin: const EdgeInsets.only(left: 8, top: 4),
+                                          width: 8,
+                                          height: 8,
+                                          decoration: const BoxDecoration(color: Color(0xFFF0B85E), shape: BoxShape.circle),
+                                        )
+                                    ],
+                                  ),
                                 ),
                               ),
                             );

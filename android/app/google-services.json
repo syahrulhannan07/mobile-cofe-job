@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "234748322219",
+    "project_id": "cafejob-6a969",
+    "storage_bucket": "cafejob-6a969.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:234748322219:android:30302aef0796be6c7e72ee",
+        "android_client_info": {
+          "package_name": "com.example.cofe_job"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABpNgm0jaOgnChTixoKU2lyCgQpR7GEQM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

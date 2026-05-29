@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:dio/dio.dart';
 import '../../../../core/constants/colors.dart';
+import '../../../../core/network/api_config.dart'; // 🔥 Import ApiConfig yang baru dibuat
 import '../widgets/custom_text_field.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
@@ -39,6 +42,39 @@ class _LoginScreenState extends State<LoginScreen> {
     await prefs.setString('userRole', userData['peran'] ?? '');
   }
 
+  // Mengirim Token FCM ke Laravel Backend menggunakan ApiConfig
+  Future<void> _uploadFcmTokenToBackend(String jwtToken) async {
+    try {
+      // 1. Ambil token FCM unik dari perangkat
+      String? fcmToken = await FirebaseMessaging.instance.getToken();
+      
+      if (fcmToken != null) {
+        print("FCM Token Perangkat: $fcmToken");
+
+        // 2. Kirim ke API Laravel menggunakan URL dari ApiConfig
+        final dio = Dio(); 
+        final response = await dio.post(
+          ApiConfig.updateFcmToken, // 🔥 Menggunakan rute terpusat dari ApiConfig
+          data: {
+            'fcm_token': fcmToken,
+          },
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $jwtToken', // Membawa token JWT Pelamar
+              'Accept': 'application/json',
+            },
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          print("Token FCM berhasil disimpan di database Laravel.");
+        }
+      }
+    } catch (e) {
+      print("Gagal mengirim Token FCM ke backend: $e");
+    }
+  }
+
   Future<void> _handleLogin() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
@@ -71,10 +107,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // VALIDASI AKTOR: Hanya Pelamar yang boleh masuk ke Mobile App
         if (peran == "Pelamar") {
+          // 1. Simpan session login local perangkat
           await _saveLoginSession(userData, token);
+
+          // 2. Ambil dan kirim token FCM ke database Laravel
+          await _uploadFcmTokenToBackend(token);
 
           _showMessage("Login berhasil! Selamat datang", isError: false);
 
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const MainLayout()),

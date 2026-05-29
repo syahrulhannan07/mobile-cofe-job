@@ -1,7 +1,7 @@
 class ApiConfig {
   // Base URL Utama (Cukup ganti di sini jika pindah server/lokal)
   static const String baseUrl =
-      'https://cofe-job.cicd.my.id/api/v1'; // Contoh IP
+      'http://192.168.1.4:8000/api/v1'; // Contoh IP
   // static const String baseUrl = 'http://localhost:8000/api'; // Contoh Chrome Web
 
   // --- DAFTAR ROUTE / ENDPOINT API ---
@@ -30,6 +30,8 @@ class ApiConfig {
       '$baseUrl/lamaran/$idLamaran/jawaban';
   static String kirimLamaran(int idLamaran) =>
       '$baseUrl/lamaran/$idLamaran/kirim';
+  static String detailLowongan(int id) =>
+    '$baseUrl/lowongan/$id';
 
   // Fitur Profil
   static const String profile = '$baseUrl/pelamar/profil';
@@ -51,11 +53,6 @@ class ApiConfig {
   static String detailLamaran(int id) => "$baseUrl/pelamar/lamaran/$id";
 
   // Endpoint HTTP Notifikasi
-  static const String notificationsEndpoint = '$baseUrl/notifikasi';
-  static const String broadcastingAuthEndpoint = '$baseUrl/broadcasting/auth';
-
-  // --- CONFIG REALTIME LARAVEL REVERB ---
-  static const String reverbAppKey = 'erxfm28nbnqhwl3yfqrh'; // Isi dengan PUSHER_APP_KEY / REVERB_APP_KEY backend Anda
-  static const String reverbHost = 'cofe-job.cicd.my.id';           // Ganti ke IP VPS jika sudah deploy
-  static const String reverbPort = '443';                // Port default Laravel Reverb
+  static const String notificationsEndpoint = '$baseUrl/auth/notifikasi';
+  static const String updateFcmToken = '$baseUrl/auth/notifikasi/update-fcm-token';
 }

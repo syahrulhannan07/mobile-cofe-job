@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
+// ignore: unused_import
 import 'tracking_timeline_screen.dart';
 
 class ApplyJobScreen extends StatefulWidget {
@@ -43,7 +44,8 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   Map<String, Uint8List> uploadedFiles = {};
   Map<String, String> uploadedFileNames = {};
 
-  // Mapping Jawaban Tahap 2: { id_pertanyaan: TextEditingController }
+  // Mapping Jawaban Tahap 2: { id_pertanyaan (String) → TextEditingController }
+  // SATU map ini saja yang digunakan, _jawabanControllers dihapus (redundan)
   Map<String, TextEditingController> pertanyaanControllers = {};
 
   // --- DATA STATE TAHAP 3 (Profil Pelamar Lengkap Sesuai Profile Screen) ---
@@ -74,13 +76,13 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 2200),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeOutBack),
+        curve: const Interval(0.0, 0.45, curve: Curves.easeOutBack),
       ),
     );
 
@@ -297,38 +299,77 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         return;
       }
 
-      // 2. Fetch Detail Lowongan
+      // 2. Fetch Detail Lowongan untuk mendapatkan pertanyaan_seleksi
       final resDetail = await http.get(
-        Uri.parse("${ApiConfig.baseUrl}/lowongan/${widget.jobId}/detail"),
+        Uri.parse("${ApiConfig.baseUrl}/lowongan/${widget.jobId}"),
         headers: {
           "Accept": "application/json",
           "Authorization": "Bearer $token",
         },
       );
 
+      debugPrint("=== [ApplyJob] Detail Lowongan status: ${resDetail.statusCode} ===");
+      debugPrint("=== [ApplyJob] Body: ${resDetail.body} ===");
+
       if (resDetail.statusCode == 200) {
         final resData = jsonDecode(resDetail.body);
-        if (resData['status'] == 'success' && resData['data'] != null) {
+        
+        // Telusuri semua kemungkinan lokasi pertanyaan_seleksi dalam response
+        List<dynamic>? foundPertanyaan;
+
+        if (resData['data'] != null) {
           var dataLowongan = resData['data'];
-          
-          if (dataLowongan['pertanyaan_lowongan'] is List) {
-            pertanyaanSeleksi = dataLowongan['pertanyaan_lowongan'];
-          } else if (dataLowongan['lowongan'] != null && dataLowongan['lowongan']['pertanyaan_lowongan'] is List) {
-            pertanyaanSeleksi = dataLowongan['lowongan']['pertanyaan_lowongan'];
-          } else if (dataLowongan['pertanyaan_seleksi'] is List) {
-            pertanyaanSeleksi = dataLowongan['pertanyaan_seleksi'];
-          } else if (dataLowongan['lowongan'] != null && dataLowongan['lowongan']['pertanyaan_seleksi'] is List) {
-            pertanyaanSeleksi = dataLowongan['lowongan']['pertanyaan_seleksi'];
+
+          // Kemungkinan 1: data.pertanyaan_seleksi (struktur flat)
+          if (dataLowongan['pertanyaan_seleksi'] is List) {
+            foundPertanyaan = dataLowongan['pertanyaan_seleksi'];
           }
+          // Kemungkinan 2: data.lowongan.pertanyaan_seleksi (nested)
+          else if (dataLowongan['lowongan'] is Map &&
+              dataLowongan['lowongan']['pertanyaan_seleksi'] is List) {
+            foundPertanyaan = dataLowongan['lowongan']['pertanyaan_seleksi'];
+          }
+          // Kemungkinan 3: data.data.pertanyaan_seleksi (double nested)
+          else if (dataLowongan['data'] is Map &&
+              dataLowongan['data']['pertanyaan_seleksi'] is List) {
+            foundPertanyaan = dataLowongan['data']['pertanyaan_seleksi'];
+          }
+        }
+        // Kemungkinan 4: langsung di root response (tanpa wrapper data)
+        else if (resData['pertanyaan_seleksi'] is List) {
+          foundPertanyaan = resData['pertanyaan_seleksi'];
+        }
+
+        if (foundPertanyaan != null && foundPertanyaan.isNotEmpty) {
+          pertanyaanSeleksi = foundPertanyaan;
+          debugPrint("=== [ApplyJob] Ditemukan ${pertanyaanSeleksi.length} pertanyaan ===");
+          debugPrint("=== [ApplyJob] Sample key pertanyaan pertama: ${pertanyaanSeleksi.first.keys.toList()} ===");
 
           pertanyaanControllers.clear();
           for (var p in pertanyaanSeleksi) {
-            String idPertanyaan = (p['id_pertanyaan'] ?? p['id_pertanyaan_lowongan'] ?? p['id'] ?? '').toString();
-            if (idPertanyaan.isNotEmpty) {
+            // Coba semua kemungkinan nama field ID pertanyaan
+            String idPertanyaan = (
+              p['id_pertanyaan'] ??
+              p['id_pertanyaan_lowongan'] ??
+              p['id'] ??
+              ''
+            ).toString();
+
+            if (idPertanyaan.isNotEmpty && idPertanyaan != 'null') {
               pertanyaanControllers[idPertanyaan] = TextEditingController();
+              debugPrint("=== [ApplyJob] Controller dibuat untuk id: $idPertanyaan ===");
+            } else {
+              debugPrint("=== [ApplyJob] PERINGATAN: id pertanyaan kosong/null untuk item: $p ===");
             }
           }
+        } else {
+          debugPrint("=== [ApplyJob] TIDAK DITEMUKAN pertanyaan_seleksi di response. Keys root: ${resData.keys.toList()} ===");
+          if (resData['data'] != null) {
+            debugPrint("=== [ApplyJob] Keys data: ${(resData['data'] as Map).keys.toList()} ===");
+          }
         }
+      } else {
+        debugPrint("=== [ApplyJob] Gagal fetch detail lowongan: ${resDetail.statusCode} ===");
       }
 
       // 3. Ambil data profil pelamar
@@ -483,7 +524,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       final mainResponse = await http.Response.fromStream(streamedResponse);
 
       if (mainResponse.statusCode == 200) {
-        _showValidationError("Profil utama berhasil disimpan.");
+        _showValidationSuccess("Profil utama berhasil disimpan.");
         setState(() => _isEditingMaster = false);
         _fetchProfileData();
       } else {
@@ -523,7 +564,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        _showValidationError("Data pendidikan berhasil disimpan.");
+        _showValidationSuccess("Data pendidikan berhasil disimpan.");
         _fetchProfileData(); 
       }
     } catch (e) {
@@ -537,7 +578,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     final form = _skillForms[index];
     String namaSkill = (form['nama_skill'] as TextEditingController).text;
     if (namaSkill.isEmpty) { _showValidationError("Nama skill tidak boleh kosong."); return; }
-    if (form['id'] != null && form['id'].toString().isNotEmpty) { _showValidationError("Skill ini sudah tersimpan."); return; }
+    if (form['id'] != null && form['id'].toString().isNotEmpty) { _showValidationSuccess("Skill ini sudah tersimpan."); return; }
 
     setState(() => _isLoading = true);
     try {
@@ -550,7 +591,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        _showValidationError("Keahlian baru berhasil ditambahkan.");
+        _showValidationSuccess("Keahlian baru berhasil ditambahkan.");
         _fetchProfileData();
       }
     } catch (e) {
@@ -585,7 +626,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        _showValidationError("Data pengalaman kerja berhasil disimpan.");
+        _showValidationSuccess("Data pengalaman kerja berhasil disimpan.");
         _fetchProfileData();
       }
     } catch (e) {
@@ -621,7 +662,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         if (type == 'skill') _removeSkillForm(localIndex);
         if (type == 'pengalaman') _removePengalamanForm(localIndex);
         
-        _showValidationError("Data berhasil dihapus.");
+        _showValidationSuccess("Data berhasil dihapus.");
       }
     } catch (e) {
       _showValidationError("Kesalahan saat menghapus: $e");
@@ -695,8 +736,13 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       }
     } else if (currentStep == 2) {
       for (var q in pertanyaanSeleksi) {
-        String idPertanyaan = (q['id_pertanyaan'] ?? q['id_pertanyaan_lowongan'] ?? q['id'] ?? '').toString();
-        if (idPertanyaan.isEmpty) continue;
+        String idPertanyaan = (
+          q['id_pertanyaan'] ??
+          q['id_pertanyaan_lowongan'] ??
+          q['id'] ??
+          ''
+        ).toString();
+        if (idPertanyaan.isEmpty || idPertanyaan == 'null') continue;
         String jawaban = pertanyaanControllers[idPertanyaan]?.text.trim() ?? "";
         if (jawaban.isEmpty) {
           _showValidationError("Harap jawab semua pertanyaan dari perusahaan sebelum melanjutkan.");
@@ -748,6 +794,16 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showValidationSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
       ),
@@ -764,76 +820,172 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       String? token = prefs.getString("token");
 
       if (idLamaran == null) {
-        _showValidationError("ID lamaran tidak valid.");
+        _showValidationError("ID lamaran tidak valid. Coba keluar dan masuk kembali.");
         setState(() => _isLoading = false);
         return;
       }
 
-      // STEP 1: Simpan Jawaban Kuesioner
+      debugPrint("=== [Submit] Mulai pengiriman lamaran ID: $idLamaran ===");
+      debugPrint("=== [Submit] Jumlah pertanyaan: ${pertanyaanSeleksi.length} ===");
+      debugPrint("=== [Submit] Jumlah controller: ${pertanyaanControllers.length} ===");
+
+      // ─── STEP 1: Unggah Berkas Dokumen Tahap 1 ────────────────────────
+      // ─── STEP 1: Unggah Berkas Dokumen (satu per satu per file) ──────────
+      if (uploadedFiles.isNotEmpty) {
+        debugPrint("=== [Submit] Mengunggah ${uploadedFiles.length} dokumen satu per satu... ===");
+        var uriDokumen = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/dokumen");
+
+        for (var entry in uploadedFiles.entries) {
+          String idDoc = entry.key;       // contoh: "1", "6", "5"
+          String fileName = uploadedFileNames[idDoc] ?? "dokumen.pdf";
+          String ext = fileName.split('.').last.toLowerCase();
+          String mimeType = ext == 'pdf'
+              ? 'application/pdf'
+              : (ext == 'png' ? 'image/png' : 'image/jpeg');
+
+          debugPrint("=== [Submit] Upload dokumen id_jenis_dokumen=$idDoc → $fileName ===");
+
+          var docRequest = http.MultipartRequest('POST', uriDokumen);
+          docRequest.headers.addAll({
+            "Accept": "application/json",
+            "Authorization": "Bearer $token",
+          });
+
+          // Field file: nama field = 'dokumen'
+          docRequest.files.add(
+            http.MultipartFile.fromBytes(
+              'dokumen',
+              entry.value,
+              filename: fileName,
+              contentType: MediaType.parse(mimeType),
+            ),
+          );
+
+          // Field text: id_jenis_dokumen
+          docRequest.fields['id_jenis_dokumen'] = idDoc;
+
+          var docStreamedRes = await docRequest.send();
+          var docResponse = await http.Response.fromStream(docStreamedRes);
+
+          debugPrint("=== [Submit] Dokumen $idDoc status: ${docResponse.statusCode} ===");
+          debugPrint("=== [Submit] Dokumen $idDoc body: ${docResponse.body} ===");
+
+          if (docResponse.statusCode != 200 && docResponse.statusCode != 201) {
+            String errMsg = "Gagal mengunggah dokumen '$fileName'.";
+            try {
+              final err = jsonDecode(docResponse.body);
+              errMsg = err['message'] ?? err['error'] ?? errMsg;
+            } catch (_) {}
+            _showValidationError(errMsg);
+            setState(() => _isLoading = false);
+            return;
+          }
+        }
+        debugPrint("=== [Submit] ✅ Semua dokumen berhasil diunggah. ===");
+      } else {
+        debugPrint("=== [Submit] Tidak ada dokumen untuk diunggah. ===");
+      }
+
+      // ─── STEP 2: Simpan Jawaban Kuesioner ─────────────────────────────
       List<Map<String, dynamic>> listJawaban = [];
       pertanyaanControllers.forEach((idPertanyaan, controller) {
-        listJawaban.add({
-          "id_pertanyaan": int.parse(idPertanyaan),
-          "jawaban": controller.text,
-        });
+        String jawaban = controller.text.trim();
+        int? idInt = int.tryParse(idPertanyaan);
+        if (idInt != null) {
+          listJawaban.add({"id_pertanyaan": idInt, "jawaban": jawaban});
+          debugPrint("=== [Submit] Jawaban id=$idInt: '$jawaban' ===");
+        }
       });
+
+      debugPrint("=== [Submit] Total jawaban: ${listJawaban.length} ===");
 
       if (listJawaban.isNotEmpty) {
         var uriJawaban = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/jawaban");
-        var responseJawaban = await http.post(
-          uriJawaban,
-          headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
-          body: jsonEncode(listJawaban),
-        );
+        bool jawabanBerhasil = false;
 
-        if (responseJawaban.statusCode != 200 && responseJawaban.statusCode != 201) {
-          final err = jsonDecode(responseJawaban.body);
-          _showValidationError(err['message'] ?? "Gagal menyimpan jawaban seleksi.");
+        // Format A: raw array  → body = [{"id_pertanyaan":X,"jawaban":"..."},...]
+        final bodyA = jsonEncode(listJawaban);
+        debugPrint("=== [Submit] Coba format A (array): $bodyA ===");
+        var resA = await http.post(uriJawaban,
+            headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
+            body: bodyA);
+        debugPrint("=== [Submit] Format A status: ${resA.statusCode}, body: ${resA.body} ===");
+        if (resA.statusCode == 200 || resA.statusCode == 201) jawabanBerhasil = true;
+
+        // Format B: wrapped object  → body = {"jawaban":[...]}
+        if (!jawabanBerhasil) {
+          final bodyB = jsonEncode({"jawaban": listJawaban});
+          debugPrint("=== [Submit] Coba format B (wrapped): $bodyB ===");
+          var resB = await http.post(uriJawaban,
+              headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
+              body: bodyB);
+          debugPrint("=== [Submit] Format B status: ${resB.statusCode}, body: ${resB.body} ===");
+          if (resB.statusCode == 200 || resB.statusCode == 201) jawabanBerhasil = true;
+        }
+
+        // Format C: kirim satu per satu sebagai POST individual
+        if (!jawabanBerhasil) {
+          debugPrint("=== [Submit] Coba format C (satu per satu)... ===");
+          bool semuaBerhasil = true;
+          for (var item in listJawaban) {
+            final bodyItem = jsonEncode(item);
+            var resItem = await http.post(uriJawaban,
+                headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
+                body: bodyItem);
+            debugPrint("=== [Submit] Item id=${item['id_pertanyaan']} status: ${resItem.statusCode}, body: ${resItem.body} ===");
+            if (resItem.statusCode != 200 && resItem.statusCode != 201) {
+              semuaBerhasil = false;
+              String errMsg = "Gagal menyimpan jawaban.";
+              try { errMsg = jsonDecode(resItem.body)['message'] ?? errMsg; } catch (_) {}
+              _showValidationError(errMsg);
+              setState(() => _isLoading = false);
+              return;
+            }
+          }
+          if (semuaBerhasil) jawabanBerhasil = true;
+        }
+
+        if (!jawabanBerhasil) {
+          _showValidationError("Gagal menyimpan jawaban seleksi. Coba lagi.");
           setState(() => _isLoading = false);
           return;
         }
+        debugPrint("=== [Submit] ✅ Jawaban berhasil disimpan. ===");
+      } else {
+        debugPrint("=== [Submit] Tidak ada pertanyaan, skip jawaban. ===");
       }
 
-      // STEP 2: Unggah Berkas Dokumen Tahap 1
-      if (uploadedFiles.isNotEmpty) {
-        var uriDokumen = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/dokumen");
-        var docRequest = http.MultipartRequest('POST', uriDokumen);
-        docRequest.headers.addAll({"Accept": "application/json", "Authorization": "Bearer $token"});
-
-        for (var entry in uploadedFiles.entries) {
-          String fileName = uploadedFileNames[entry.key] ?? "dokumen.pdf";
-          docRequest.files.add(
-            http.MultipartFile.fromBytes('dokumen_${entry.key}', entry.value, filename: fileName),
-          );
-        }
-
-        var docStreamedRes = await docRequest.send();
-        var docResponse = await http.Response.fromStream(docStreamedRes);
-
-        if (docResponse.statusCode != 200 && docResponse.statusCode != 201) {
-          final err = jsonDecode(docResponse.body);
-          _showValidationError(err['message'] ?? "Gagal mengunggah file dokumen berkas.");
-          setState(() => _isLoading = false);
-          return;
-        }
-      }
-
-      // STEP 3: Finalisasi / Kirim Lamaran
+      // ─── STEP 3: Finalisasi / Kirim Lamaran ───────────────────────────
+      debugPrint("=== [Submit] Finalisasi lamaran... ===");
       var uriKirim = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/kirim");
       var responseKirim = await http.post(
         uriKirim,
-        headers: {"Accept": "application/json", "Authorization": "Bearer $token"},
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
       );
+
+      debugPrint("=== [Submit] Kirim status: ${responseKirim.statusCode} ===");
+      debugPrint("=== [Submit] Kirim body: ${responseKirim.body} ===");
 
       if (responseKirim.statusCode == 200 || responseKirim.statusCode == 201) {
         setState(() => currentStep = 5);
         _animationController.forward();
+        debugPrint("=== [Submit] ✅ Lamaran berhasil dikirim! ===");
       } else {
-        final errorData = jsonDecode(responseKirim.body);
-        _showValidationError(errorData['message'] ?? "Gagal menyelesaikan pengiriman berkas lamaran.");
+        String errMsg = "Gagal menyelesaikan pengiriman lamaran.";
+        try {
+          final errorData = jsonDecode(responseKirim.body);
+          errMsg = errorData['message'] ?? errorData['error'] ?? errMsg;
+        } catch (_) {}
+        _showValidationError(errMsg);
       }
-    } catch (e) {
-      _showValidationError("Terjadi kesalahan sistem atau jaringan internet: $e");
+    } catch (e, stackTrace) {
+      debugPrint("=== [Submit] ERROR: $e ===");
+      debugPrint("=== [Submit] StackTrace: $stackTrace ===");
+      _showValidationError("Terjadi kesalahan: ${e.toString().replaceAll('Exception:', '').trim()}");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -924,19 +1076,63 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     if (pertanyaanSeleksi.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(child: Text("Tidak ada pertanyaan seleksi khusus. Silakan klik Lanjut.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey))),
+        child: Center(
+          child: Text(
+            "Tidak ada pertanyaan seleksi khusus.\nSilakan klik Lanjut.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
       );
     }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
-        const Text("Silakan jawab pertanyaan pada lowongan ini untuk membantu perusahaan mengenal potensi Anda lebih dalam.", style: TextStyle(fontSize: 14, color: AppColors.textMain, height: 1.5)),
+        const Text(
+          "Silakan jawab pertanyaan pada lowongan ini untuk membantu perusahaan mengenal potensi Anda lebih dalam.",
+          style: TextStyle(fontSize: 14, color: AppColors.textMain, height: 1.5),
+        ),
         const SizedBox(height: 25),
-        ...pertanyaanSeleksi.map((q) {
-          String idPertanyaan = (q['id_pertanyaan'] ?? q['id_pertanyaan_lowongan'] ?? q['id'] ?? '').toString();
-          String teksPertanyaan = q['pertanyaan'] ?? q['pertanyaan_text'] ?? "Pertanyaan Seleksi";
-          return _buildInputField(teksPertanyaan, "Tulis jawaban Anda di sini...", isTextArea: true, controller: pertanyaanControllers[idPertanyaan]);
+        ...pertanyaanSeleksi.asMap().entries.map((entry) {
+          int nomor = entry.key + 1;
+          var q = entry.value;
+
+          // Ambil ID pertanyaan — coba semua kemungkinan nama field
+          String idPertanyaan = (
+            q['id_pertanyaan'] ??
+            q['id_pertanyaan_lowongan'] ??
+            q['id'] ??
+            ''
+          ).toString();
+
+          // Ambil teks pertanyaan — coba semua kemungkinan nama field
+          String teksPertanyaan = (
+            q['pertanyaan'] ??
+            q['pertanyaan_text'] ??
+            q['teks_pertanyaan'] ??
+            q['text'] ??
+            q['question'] ??
+            'Pertanyaan $nomor'
+          ).toString();
+
+          // Pastikan controller tersedia; buat jika belum ada (fallback safety)
+          if (idPertanyaan.isNotEmpty && idPertanyaan != 'null' &&
+              !pertanyaanControllers.containsKey(idPertanyaan)) {
+            pertanyaanControllers[idPertanyaan] = TextEditingController();
+          }
+
+          TextEditingController? controller = idPertanyaan.isNotEmpty && idPertanyaan != 'null'
+              ? pertanyaanControllers[idPertanyaan]
+              : null;
+
+          return _buildInputField(
+            "$nomor. $teksPertanyaan",
+            "Tulis jawaban Anda di sini...",
+            isTextArea: true,
+            controller: controller,
+          );
         }),
         const SizedBox(height: 30),
       ],
@@ -1152,72 +1348,484 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   }
 
   Widget _buildStep4Review() {
-    ImageProvider reviewImageProvider = const NetworkImage('https://via.placeholder.com/150');
-    if (kIsWeb && _profileImageBytes != null) reviewImageProvider = MemoryImage(_profileImageBytes!);
-    else if (!kIsWeb && _profileImagePath != null) reviewImageProvider = FileImage(io.File(_profileImagePath!));
-    else if (_networkProfileImageUrl != null && _networkProfileImageUrl!.isNotEmpty) reviewImageProvider = NetworkImage(_networkProfileImageUrl!);
+    ImageProvider reviewImageProvider = const AssetImage('assets/images/placeholder_avatar.png');
+    try {
+      if (kIsWeb && _profileImageBytes != null) {
+        reviewImageProvider = MemoryImage(_profileImageBytes!);
+      } else if (!kIsWeb && _profileImagePath != null) {
+        reviewImageProvider = FileImage(io.File(_profileImagePath!));
+      } else if (_networkProfileImageUrl != null && _networkProfileImageUrl!.isNotEmpty) {
+        reviewImageProvider = NetworkImage(_networkProfileImageUrl!);
+      }
+    } catch (_) {}
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 20),
-        const Text("Harap periksa kembali ringkasan seluruh kelengkapan data lamaran Anda sebelum dikirim.", style: TextStyle(fontSize: 14, color: AppColors.textMain, height: 1.5)),
-        const SizedBox(height: 25),
-        const Text("Profil Pelamar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF422E26))),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
         Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade200)),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8EC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFF0B85E).withOpacity(0.4)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Color(0xFFF0B85E), size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Periksa kembali seluruh data lamaran Anda sebelum dikirim. Setelah dikirim, data tidak dapat diubah.",
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF7A5C2E), height: 1.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // ─── SEKSI: PROFIL PELAMAR ────────────────────────────────────────
+        _buildReviewSectionHeader("Profil Pelamar", Icons.person_rounded, onEdit: () => setState(() => currentStep = 3)),
+        const SizedBox(height: 12),
+
+        // Foto & Info Utama
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _reviewCardDecoration(),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(radius: 30, backgroundImage: reviewImageProvider),
-              const SizedBox(width: 15),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 36,
+                    backgroundColor: Colors.grey.shade200,
+                    backgroundImage: reviewImageProvider,
+                    onBackgroundImageError: (_, __) {},
+                  ),
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: GestureDetector(
+                      onTap: () => setState(() => currentStep = 3),
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0B85E),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: const Icon(Icons.edit_rounded, size: 13, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_namaController.text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(
+                      _namaController.text.isNotEmpty ? _namaController.text : "-",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2B1810)),
+                    ),
                     const SizedBox(height: 6),
-                    Text("TTL: ${_ttlController.text}", style: const TextStyle(color: Colors.black87, fontSize: 12)),
-                    Text("Gender: $_jenisKelamin", style: const TextStyle(color: Colors.black87, fontSize: 12)),
-                    Text("Telp: ${_noTelpController.text}", style: const TextStyle(color: Colors.black87, fontSize: 12)),
+                    _reviewInfoRow(Icons.cake_rounded, "Tanggal Lahir", _ttlController.text),
+                    _reviewInfoRow(Icons.wc_rounded, "Jenis Kelamin", _jenisKelamin),
+                    _reviewInfoRow(Icons.phone_rounded, "No. Telepon", _noTelpController.text),
+                    _reviewInfoRow(Icons.location_on_rounded, "Alamat", _alamatController.text),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 15),
-        _buildReviewCard("Riwayat Pendidikan", "${_pendidikanForms.length} Data Tersimpan"),
-        _buildReviewCard("Keahlian / Skill", "${_skillForms.length} Data Tersimpan"),
-        _buildReviewCard("Pengalaman Kerja", "${_pengalamanForms.length} Data Tersimpan"),
-        
-        const SizedBox(height: 20),
-        const Text("Tanggapan Pertanyaan Seleksi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF422E26))),
-        const SizedBox(height: 10),
-        if (pertanyaanSeleksi.isEmpty)
-          const Text("Tidak ada pertanyaan khusus dari perusahaan.", style: TextStyle(color: Colors.grey, fontSize: 13))
-        else
-          ...pertanyaanSeleksi.map((q) {
-            String idPertanyaan = (q['id_pertanyaan'] ?? q['id_pertanyaan_lowongan'] ?? q['id'] ?? '').toString();
-            return _buildReviewCard(q['pertanyaan'] ?? q['pertanyaan_text'] ?? "Pertanyaan", pertanyaanControllers[idPertanyaan]?.text ?? "-");
-          }),
-        const SizedBox(height: 20),
-        const Text("Dokumen Terlampir", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF422E26))),
+
+        // Tentang Saya
+        if (_tentangSayaController.text.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: _reviewCardDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.format_quote_rounded, size: 16, color: Color(0xFFF0B85E)),
+                  const SizedBox(width: 6),
+                  const Text("Tentang Saya", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF422E26))),
+                ]),
+                const SizedBox(height: 8),
+                Text(_tentangSayaController.text, style: const TextStyle(fontSize: 13, color: Color(0xFF6B6B6B), height: 1.5)),
+              ],
+            ),
+          ),
+        ],
+
+        // Pendidikan
         const SizedBox(height: 10),
         Container(
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade200)),
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: _reviewCardDecoration(),
           child: Column(
-            children: dokumenWajib.map((doc) {
-              String idDoc = doc['id_jenis_dokumen'].toString();
-              String name = uploadedFileNames[idDoc] ?? "Belum diunggah";
-              return _buildFileReviewItem(name, doc['nama_dokumen'] ?? "Berkas");
-            }).toList(),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.school_rounded, size: 16, color: Color(0xFFF0B85E)),
+                const SizedBox(width: 6),
+                const Text("Pendidikan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF422E26))),
+                const Spacer(),
+                Text("${_pendidikanForms.length} Data", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ]),
+              if (_pendidikanForms.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text("Belum ada data pendidikan", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                )
+              else ...[
+                const SizedBox(height: 10),
+                ..._pendidikanForms.asMap().entries.map((e) {
+                  var f = e.value;
+                  String inst = (f['institusi'] as TextEditingController).text;
+                  String jur  = (f['jurusan'] as TextEditingController).text;
+                  String tkt  = (f['tingkat'] as TextEditingController).text;
+                  String tMul = (f['tahun_mulai'] as TextEditingController).text;
+                  String tSel = (f['tahun_selesai'] as TextEditingController).text;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF7F3),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(inst.isNotEmpty ? inst : "-", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          if (jur.isNotEmpty) Text(jur, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                          if (tkt.isNotEmpty) Text(tkt, style: const TextStyle(fontSize: 12, color: Color(0xFFF0B85E), fontWeight: FontWeight.w600)),
+                          if (tMul.isNotEmpty || tSel.isNotEmpty)
+                            Text("${tMul.isNotEmpty ? tMul : '?'} — ${tSel.isNotEmpty ? tSel : 'Sekarang'}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ],
           ),
         ),
+
+        // Keahlian
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: _reviewCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF0B85E)),
+                const SizedBox(width: 6),
+                const Text("Keahlian / Skill", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF422E26))),
+                const Spacer(),
+                Text("${_skillForms.length} Skill", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ]),
+              if (_skillForms.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text("Belum ada data keahlian", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                )
+              else ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _skillForms.map((f) {
+                    String nama = (f['nama_skill'] as TextEditingController).text;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0B85E).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFF0B85E).withOpacity(0.4)),
+                      ),
+                      child: Text(nama.isNotEmpty ? nama : "-", style: const TextStyle(fontSize: 12, color: Color(0xFF6B4F31), fontWeight: FontWeight.w600)),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // Pengalaman Kerja
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: _reviewCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.work_rounded, size: 16, color: Color(0xFFF0B85E)),
+                const SizedBox(width: 6),
+                const Text("Pengalaman Kerja", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF422E26))),
+                const Spacer(),
+                Text("${_pengalamanForms.length} Data", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ]),
+              if (_pengalamanForms.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text("Belum ada data pengalaman", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                )
+              else ...[
+                const SizedBox(height: 10),
+                ..._pengalamanForms.asMap().entries.map((e) {
+                  var f = e.value;
+                  String perusahaan = (f['nama_perusahaan'] as TextEditingController).text;
+                  String posisi     = (f['posisi'] as TextEditingController).text;
+                  String tMul       = (f['tanggal_mulai'] as TextEditingController).text;
+                  String tSel       = (f['tanggal_selesai'] as TextEditingController).text;
+                  String desk       = (f['deskripsi'] as TextEditingController).text;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF7F3),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(perusahaan.isNotEmpty ? perusahaan : "-", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 2),
+                          if (posisi.isNotEmpty) Text(posisi, style: const TextStyle(fontSize: 12, color: Color(0xFFF0B85E), fontWeight: FontWeight.w600)),
+                          if (tMul.isNotEmpty || tSel.isNotEmpty)
+                            Text("${tMul.isNotEmpty ? tMul : '?'} — ${tSel.isNotEmpty ? tSel : 'Sekarang'}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          if (desk.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(desk, style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // ─── SEKSI: TANGGAPAN PERTANYAAN ─────────────────────────────────
+        _buildReviewSectionHeader("Tanggapan Pertanyaan Seleksi", Icons.quiz_rounded),
+        const SizedBox(height: 12),
+        if (pertanyaanSeleksi.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: _reviewCardDecoration(),
+            child: const Row(children: [
+              Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+              SizedBox(width: 8),
+              Text("Tidak ada pertanyaan khusus dari perusahaan.", style: TextStyle(color: Colors.grey, fontSize: 13)),
+            ]),
+          )
+        else
+          ...pertanyaanSeleksi.asMap().entries.map((entry) {
+            int nomor = entry.key + 1;
+            var q = entry.value;
+            String idPertanyaan = (q['id_pertanyaan'] ?? q['id_pertanyaan_lowongan'] ?? q['id'] ?? '').toString();
+            String teksPertanyaan = (q['pertanyaan'] ?? q['pertanyaan_text'] ?? q['teks_pertanyaan'] ?? 'Pertanyaan $nomor').toString();
+            String jawaban = pertanyaanControllers[idPertanyaan]?.text ?? "-";
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: _reviewCardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(
+                        width: 22, height: 22,
+                        decoration: const BoxDecoration(color: Color(0xFFF0B85E), shape: BoxShape.circle),
+                        child: Center(child: Text("$nomor", style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(teksPertanyaan, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B1810)))),
+                    ]),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F4EE),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(jawaban.isNotEmpty ? jawaban : "-", style: const TextStyle(color: Color(0xFF6B6B6B), fontSize: 13, height: 1.4)),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+
+        const SizedBox(height: 24),
+
+        // ─── SEKSI: DOKUMEN ───────────────────────────────────────────────
+        _buildReviewSectionHeader("Dokumen Terlampir", Icons.folder_rounded),
+        const SizedBox(height: 12),
+        Container(
+          decoration: _reviewCardDecoration(),
+          child: dokumenWajib.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: Text("Tidak ada dokumen persyaratan.", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                )
+              : Column(
+                  children: dokumenWajib.asMap().entries.map((entry) {
+                    int idx = entry.key;
+                    var doc = entry.value;
+                    String idDoc = doc['id_jenis_dokumen'].toString();
+                    bool isWajib = doc['wajib'] == true || doc['wajib'] == 1;
+                    String fileName = uploadedFileNames[idDoc] ?? "";
+                    bool uploaded = fileName.isNotEmpty;
+
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 38, height: 38,
+                                decoration: BoxDecoration(
+                                  color: uploaded ? Colors.green.shade50 : Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  uploaded ? Icons.insert_drive_file_rounded : Icons.upload_file_rounded,
+                                  color: uploaded ? Colors.green : Colors.red.shade300,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Text(doc['nama_dokumen'] ?? "Berkas", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B1810))),
+                                      if (isWajib) ...[
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
+                                          child: const Text("Wajib", style: TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    ]),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      uploaded ? fileName : "Belum diunggah",
+                                      style: TextStyle(fontSize: 11, color: uploaded ? Colors.grey : Colors.red.shade300),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                uploaded ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                                color: uploaded ? Colors.green : Colors.red.shade300,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (idx < dokumenWajib.length - 1)
+                          Divider(height: 1, color: Colors.grey.shade100),
+                      ],
+                    );
+                  }).toList(),
+                ),
+        ),
+
         const SizedBox(height: 30),
       ],
+    );
+  }
+
+  // Helper: decoration untuk review card
+  BoxDecoration _reviewCardDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFEDE8E2)),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+    );
+  }
+
+  // Helper: section header untuk review
+  Widget _buildReviewSectionHeader(String title, IconData icon, {VoidCallback? onEdit}) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0B85E).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFFF0B85E)),
+        ),
+        const SizedBox(width: 10),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF422E26))),
+        const Spacer(),
+        if (onEdit != null)
+          GestureDetector(
+            onTap: onEdit,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0B85E).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF0B85E).withOpacity(0.3)),
+              ),
+              child: const Row(children: [
+                Icon(Icons.edit_rounded, size: 13, color: Color(0xFFF0B85E)),
+                SizedBox(width: 4),
+                Text("Edit", style: TextStyle(fontSize: 11, color: Color(0xFFF0B85E), fontWeight: FontWeight.bold)),
+              ]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Helper: info row dalam review profil
+  Widget _reviewInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFFF0B85E)),
+          const SizedBox(width: 5),
+          Text("$label: ", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          Expanded(child: Text(value.isNotEmpty ? value : "-", style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w500))),
+        ],
+      ),
     );
   }
 
@@ -1356,8 +1964,9 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
 
   Widget _buildStepper() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+      padding: const EdgeInsets.fromLTRB(30, 16, 30, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _stepIndicator(1, "Dokumen"), _stepLine(1),
           _stepIndicator(2, "Pertanyaan"), _stepLine(2),
@@ -1374,18 +1983,31 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     return Column(
       children: [
         Container(
-          width: 35, height: 35,
-          decoration: BoxDecoration(color: isActive || isCompleted ? const Color(0xFFF0B85E) : const Color(0xFFE0E0E0), shape: BoxShape.circle),
-          child: Center(child: Text("$n", style: TextStyle(color: isActive || isCompleted ? Colors.white : Colors.grey, fontWeight: FontWeight.bold))),
+          width: 38, height: 38,
+          decoration: BoxDecoration(
+            color: isActive || isCompleted ? const Color(0xFFF0B85E) : const Color(0xFFE8E4DF),
+            shape: BoxShape.circle,
+            boxShadow: isActive ? [BoxShadow(color: const Color(0xFFF0B85E).withOpacity(0.35), blurRadius: 8, offset: const Offset(0, 3))] : [],
+          ),
+          child: Center(
+            child: isCompleted
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                : Text("$n", style: TextStyle(color: isActive ? Colors.white : const Color(0xFFADA9A4), fontWeight: FontWeight.bold, fontSize: 15)),
+          ),
         ),
-        const SizedBox(height: 5),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        const SizedBox(height: 8),
+        Text(label, style: TextStyle(fontSize: 10, color: isActive ? const Color(0xFFF0B85E) : Colors.grey, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
       ],
     );
   }
 
   Widget _stepLine(int n) {
-    return Expanded(child: Container(height: 2, color: currentStep > n ? const Color(0xFFF0B85E) : const Color(0xFFE0E0E0), margin: const EdgeInsets.only(bottom: 15)));
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Container(height: 2, color: currentStep > n ? const Color(0xFFF0B85E) : const Color(0xFFE0E0E0)),
+      ),
+    );
   }
 
   Widget _buildBottomButtons() {
@@ -1404,32 +2026,181 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   Widget _buildSuccessScreen() {
     return Scaffold(
       backgroundColor: const Color(0xFF422E26),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ScaleTransition(
-              scale: _scaleAnimation,
-              child: Container(
-                width: 140, height: 140,
-                decoration: const BoxDecoration(color: Color(0xFFF0B85E), shape: BoxShape.circle),
-                child: SlideTransition(position: _flyAnimation, child: const Icon(Icons.send_rounded, size: 60, color: Colors.white)),
-              ),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // ─── Animasi Pesawat → Ceklis ─────────────────────────
+                SizedBox(
+                  width: 160,
+                  height: 160,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Lingkaran luar (halo)
+                      ScaleTransition(
+                        scale: _scaleAnimation,
+                        child: Container(
+                          width: 160, height: 160,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0B85E).withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      // Lingkaran tengah
+                      ScaleTransition(
+                        scale: _scaleAnimation,
+                        child: Container(
+                          width: 120, height: 120,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF0B85E),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      // Icon pesawat terbang
+                      AnimatedBuilder(
+                        animation: _animationController,
+                        builder: (context, child) {
+                          // Fase 1 (0.0–0.55): pesawat muncul dengan scale
+                          // Fase 2 (0.55–1.0): pesawat terbang ke kanan atas & ceklis muncul
+                          double progress = _animationController.value;
+                          bool showPlane = progress < 0.75;
+                          bool showCheck = progress >= 0.65;
+
+                          double planeOpacity = progress < 0.55 
+                              ? progress / 0.55 
+                              : (progress < 0.75 ? 1.0 : 0.0);
+                          
+                          double planeDx = progress < 0.55 ? 0.0 : ((progress - 0.55) / 0.20) * 80;
+                          double planeDy = progress < 0.55 ? 0.0 : -((progress - 0.55) / 0.20) * 60;
+                          double planeScale = progress < 0.4 ? progress / 0.4 : 1.0;
+
+                          double checkOpacity = progress < 0.65 ? 0.0 : ((progress - 0.65) / 0.35).clamp(0.0, 1.0);
+                          double checkScale = progress < 0.65 ? 0.0 : ((progress - 0.65) / 0.35).clamp(0.0, 1.0);
+
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Pesawat
+                              if (showPlane)
+                                Transform.translate(
+                                  offset: Offset(planeDx, planeDy),
+                                  child: Transform.scale(
+                                    scale: planeScale,
+                                    child: Opacity(
+                                      opacity: planeOpacity.clamp(0.0, 1.0),
+                                      child: const Icon(Icons.send_rounded, size: 52, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              // Ceklis
+                              if (showCheck)
+                                Transform.scale(
+                                  scale: checkScale,
+                                  child: Opacity(
+                                    opacity: checkOpacity,
+                                    child: const Icon(Icons.check_rounded, size: 58, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 36),
+
+                // Teks utama
+                const Text(
+                  "Lamaran Terkirim!",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Berkas lamaran Anda telah berhasil dikirimkan. Tim rekrutmen akan meninjau kualifikasi Anda dan menghubungi Anda jika terpilih.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 13,
+                    height: 1.6,
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+
+                // Tombol Lihat Status Lamaran
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/status-lamaran',
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF0B85E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.assignment_turned_in_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text("Lihat Status Lamaran", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Tombol Kembali ke Beranda
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/beranda',
+                        (route) => false,
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white.withOpacity(0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.home_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text("Kembali ke Beranda", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 30),
-            const Text("Lamaran Terkirim", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                if (idLamaran != null) {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => TrackingTimelineScreen(lamaranId: int.parse(idLamaran!))));
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFDF2E2), foregroundColor: const Color(0xFF422E26), padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              child: const Text("Selesai & Lihat Status", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
+          ),
         ),
       ),
     );
