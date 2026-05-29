@@ -17,7 +17,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _isLoading = true;
   String? _errorMessage; 
   
-  // 🔥 Menggunakan objek milik pusher_client_fixed
   PusherClient? _pusher;
   Channel? _channel;
   int? _userId;
@@ -34,7 +33,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.dispose();
   }
 
-  // Membersihkan koneksi websocket saat keluar dari halaman
+  // Membersihkan koneksi websocket saat keluar dari halaman agar tidak memory leak
   void _cleanupWebsocket() {
     if (_userId != null) {
       final String channelName = "private-App.Models.User.$_userId";
@@ -59,7 +58,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await _initRealtimeWebsocket();
   }
 
-  // 1. MEMBUAT HISTORI NOTIFIKASI DARI API REST
+  // 1. MENGAMBIL HISTORI NOTIFIKASI DARI API DATABASE (REST API)
   Future<void> _fetchNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -102,7 +101,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  // 2. MENGAKTIFKAN WEBSOCKET REAL-TIME LANGSUNG KE LARAVEL REVERB
+  // 2. MENDENGARKAN WEBSOCKET REAL-TIME DARI 6 NOTIFIKASI BACKEND LARAVEL REVERB
   Future<void> _initRealtimeWebsocket() async {
     if (_errorMessage != null) return;
 
@@ -119,12 +118,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
       final int port = int.tryParse(ApiConfig.reverbPort) ?? 80;
       final String targetChannel = "private-App.Models.User.$_userId";
 
-      // Konfigurasi opsi Reverb didukung penuh oleh penulisan PusherOptions ini
+      // Konfigurasi opsi Reverb menggunakan PusherOptions
       PusherOptions options = PusherOptions(
         host: ApiConfig.reverbHost,
         wsPort: port,
         wssPort: port,
-        encrypted: false, // Set true jika server VPS sudah menggunakan SSL (WSS)
+        encrypted: false, // Set menjadi true jika server produksi VPS Anda menggunakan HTTPS/WSS
         auth: PusherAuth(
           ApiConfig.broadcastingAuthEndpoint,
           headers: {
@@ -134,7 +133,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
-      // Inisialisasi instansi PusherClient baru
+      // Inisialisasi instansi PusherClient
       _pusher = PusherClient(
         ApiConfig.reverbAppKey,
         options,
@@ -155,7 +154,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       // Mendaftar masuk ke private channel user
       _channel = _pusher!.subscribe(targetChannel);
 
-      // Mendengarkan event notifikasi bawaan back-end Laravel
+      // Mendengarkan event notifikasi bawaan back-end Laravel (Menangani ke-6 kelas notifikasi sekaligus)
       _channel!.bind('Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (PusherEvent? event) {
         if (event == null || event.data == null) return;
         
@@ -165,27 +164,45 @@ class _NotificationScreenState extends State<NotificationScreen> {
           // Mengubah data string mentah menjadi Map JSON
           final Map<String, dynamic> incoming = json.decode(event.data!);
 
-          final String judulRealtime = incoming['judul'] ?? incoming['title'] ?? 'Pemberitahuan Baru';
-          final String pesanRealtime = incoming['pesan'] ?? incoming['message'] ?? 'Ada lowongan baru tersedia.';
+          // Sinkronisasi dengan key 'judul' & 'pesan' dari payload toBroadcast() Laravel kamu
+          final String judulRealtime = incoming['judul'] ?? 'Pemberitahuan Baru';
+          final String pesanRealtime = incoming['pesan'] ?? 'Ada pembaruan status lamaran terbaru.';
 
           if (mounted) {
             setState(() {
-              // Menyisipkan data baru ke baris paling atas List
+              // Menyisipkan data baru ke baris paling atas List agar langsung terlihat
               _notifications.insert(0, {
-                'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch,
+                'id': incoming['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
                 'judul': judulRealtime,
                 'pesan': pesanRealtime,
                 'dibaca': false,
-                'dibuat_pada': DateTime.now().toIso8601String(),
+                'dibuat_pada': incoming['created_at'] ?? DateTime.now().toIso8601String(),
               });
             });
 
-            // Tampilkan snackbar pemberitahuan pop-up
+            // Tampilkan snackbar pop-up interaktif di dalam aplikasi saat itu juga
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text("$judulRealtime\n$pesanRealtime"),
+                content: Row(
+                  children: [
+                    const Icon(Icons.notifications_active, color: Color(0xFFF0B85E)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(judulRealtime, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text(pesanRealtime, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 backgroundColor: const Color(0xFF635147),
                 duration: const Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             );
           }
@@ -206,6 +223,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
         title: const Text("Notifikasi", style: TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFF422E26),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (!_isLoading && _errorMessage == null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _fetchNotifications,
+              tooltip: "Segarkan",
+            )
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -232,7 +257,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
               : RefreshIndicator(
                   onRefresh: _fetchNotifications, 
                   child: _notifications.isEmpty
-                      ? const Center(child: Text("Tidak ada notifikasi"))
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.notifications_off_outlined, size: 64, color: Colors.grey),
+                              SizedBox(height: 8),
+                              Text("Tidak ada notifikasi", style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: _notifications.length,
                           itemBuilder: (context, index) {
@@ -243,13 +277,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
                             return Card(
                               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               child: ListTile(
-                                leading: const Icon(Icons.notifications_active, color: Color(0xFFF0B85E)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: const CircleAvatar(
+                                  backgroundColor: Color(0xFFFFF4E6),
+                                  child: Icon(Icons.notifications_active, color: Color(0xFFF0B85E)),
+                                ),
                                 title: Text(
                                   displayJudul,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF422E26)),
                                 ),
-                                subtitle: Text(displayPesan),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  // Mendukung pesan multi-line jika pesan dari HRD cukup panjang
+                                  child: Text(displayPesan, style: const TextStyle(color: Colors.black87)),
+                                ),
                               ),
                             );
                           },
