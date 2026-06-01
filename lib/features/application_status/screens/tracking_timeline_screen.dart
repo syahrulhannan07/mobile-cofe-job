@@ -49,7 +49,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
       debugPrint("Targeted URL: $targetedUrl");
 
       final response = await http.get(
-        Uri.parse(targetedUrl),
+        Uri.parse(ApiConfig.detailLamaran(widget.lamaranId)),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -138,16 +138,26 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24.0),
           ),
-          elevation: 5,
-          backgroundColor: Colors.white,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+          elevation: 20,
+          backgroundColor: const Color(0xFFFFFBF8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFF0EDE9), width: 1),
+                    ),
+                  ),
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Row(
@@ -155,13 +165,13 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                           Icon(
                             Icons.calendar_month_rounded,
                             color: AppColors.brownDark,
-                            size: 24,
+                            size: 22,
                           ),
                           SizedBox(width: 10),
                           Text(
                             "Detail Jadwal Wawancara",
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF2D1B18),
                             ),
@@ -170,91 +180,237 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                       ),
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
-                        child: const Icon(Icons.close, color: Colors.grey),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
                       ),
                     ],
                   ),
-                  const Divider(
-                    height: 25,
-                    thickness: 1,
-                    color: Color(0xFFF0EDE9),
-                  ),
+                ),
 
-                  _buildPopupDetailRow(
-                    "Nama Pelamar",
-                    _data?['nama_pelamar'] ?? 'Pelamar',
-                    Icons.person_outline_rounded,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Lokasi / Link Pertemuan",
-                    _wawancara?['lokasi'] ?? '-',
-                    Icons.location_on_rounded,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPopupDetailRow(
-                    "Tanggal & Waktu",
-                    _formatTanggal(
-                      _wawancara?['tanggal'] ?? _wawancara?['waktu_wawancara'],
-                      denganJam: true,
-                    ),
-                    Icons.access_time_rounded,
-                  ),
-
-                  if (_wawancara?['catatan'] != null &&
-                      (_wawancara?['catatan']?.toString().isNotEmpty ??
-                          false)) ...[
-                    const SizedBox(height: 12),
-                    _buildPopupDetailRow(
-                      "Catatan Tambahan",
-                      '"${_wawancara?['catatan']}"',
-                      Icons.sticky_note_2_outlined,
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // Body
+                SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        "Status:",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black54,
+                      if (_wawancara != null) ...[
+                        // Nama Pelamar + Status (satu baris, sesuai website)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: _buildPopupDetailRow(
+                                "Nama Pelamar",
+                                _data?['nama_pelamar'] ?? 'Pelamar',
+                                Icons.person_outline_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4, bottom: 6),
+                                  child: Text(
+                                    "Status",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0x993D2722),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFBB041),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.calendar_today_rounded,
+                                        size: 13,
+                                        color: Color(0xFF2D1B18),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _wawancara?['status_jadwal'] ??
+                                            _wawancara?['status'] ??
+                                            'Terjadwal',
+                                        style: const TextStyle(
+                                          color: Color(0xFF3D2722),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
+                        const SizedBox(height: 14),
+
+                        // Lokasi dengan brown icon box (sesuai website)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4, bottom: 6),
+                              child: Text(
+                                "Lokasi / Link Pertemuan",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0x993D2722),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F4F1),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF805000),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.location_on_rounded,
+                                      color: Color(0xFFFBB041),
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _data?['nama_kafe'] ?? '-',
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF2D1B18),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          _wawancara?['lokasi'] ?? '-',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0x993D2722),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFBB041),
-                          borderRadius: BorderRadius.circular(20),
+                        const SizedBox(height: 14),
+
+                        // Tanggal & Waktu
+                        _buildPopupDetailRow(
+                          "Tanggal & Waktu",
+                          _formatTanggal(
+                            _wawancara?['tanggal'] ??
+                                _wawancara?['waktu_wawancara'],
+                            denganJam: true,
+                          ),
+                          Icons.access_time_rounded,
                         ),
-                        child: Text(
-                          _wawancara?['status_jadwal'] ??
-                              _wawancara?['status'] ??
-                              'Terjadwal',
-                          style: const TextStyle(
-                            color: Color(0xFF3D2722),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+
+                        if (_wawancara?['catatan'] != null &&
+                            (_wawancara?['catatan']?.toString().isNotEmpty ??
+                                false)) ...[
+                          const SizedBox(height: 14),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4, bottom: 6),
+                                child: Text(
+                                  "Catatan Tambahan",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0x993D2722),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8F4F1),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  '"${_wawancara?['catatan']}"',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0x993D2722),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ] else ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              "Data jadwal wawancara belum tersedia.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
+                      const SizedBox(height: 20),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                ),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 45,
+                // Footer (sesuai website: bg lebih gelap + tombol kanan)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF0EDE9),
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerRight,
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFBB041),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 28,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -265,12 +421,13 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                         style: TextStyle(
                           color: Color(0xFF3D2722),
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -279,30 +436,39 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
   }
 
   Widget _buildPopupDetailRow(String label, String value, IconData icon) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF8B5E3C)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0x993D2722),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F4F1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF2D1B18),
-                  fontWeight: FontWeight.w600,
+              Icon(icon, size: 18, color: const Color(0xFF8B5E3C)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF2D1B18),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -374,7 +540,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Tracking Timeline",
+          "Detail Status",
           style: TextStyle(
             color: AppColors.brownDark,
             fontWeight: FontWeight.bold,
@@ -480,6 +646,13 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
   }
 
   Widget _buildHeaderCard(String tanggalLamar) {
+    final String? logoKafe = _data?['logo_kafe'];
+    final String? logoUrl = logoKafe != null
+        ? (logoKafe.startsWith('http') || logoKafe.startsWith('/')
+            ? logoKafe
+            : '${ApiConfig.baseUrl}/storage/$logoKafe')
+        : null;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -490,8 +663,35 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
         ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Logo Perusahaan
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: const Color(0xFFC69C6D),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: logoUrl != null
+                ? Image.network(
+                    logoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.store_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  )
+                : const Icon(
+                    Icons.store_rounded,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+          ),
+          const SizedBox(width: 14),
+          // Info Utama
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,18 +700,19 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                   _data?['posisi'] ?? '-',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   _data?['nama_kafe'] ?? '-',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 15,
+                    fontSize: 14,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   "Dikirim pada $tanggalLamar",
                   style: TextStyle(
@@ -523,8 +724,9 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
             ),
           ),
           const SizedBox(width: 10),
+          // Status Pill
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFFFBB041),
               borderRadius: BorderRadius.circular(20),
@@ -533,7 +735,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
               _data?['status_saat_ini'] ?? _data?['status'] ?? '-',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 13,
+                fontSize: 12,
                 color: Color(0xFF3D2722),
               ),
             ),

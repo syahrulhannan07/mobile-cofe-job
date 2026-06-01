@@ -197,49 +197,73 @@ class _StatusScreenState extends State<StatusScreen> {
                               item['id_pendaftaran'] ??
                               0;
 
-                          // LOGIKA SINKRONISASI BASE URL UNTUK PATH LOGO PERUSAHAAN
+                          // ─── LOGIKA LOGO PERUSAHAAN ───────────────────────
+                          // Debug: cetak semua key yang ada di response item
+                          debugPrint("=== [Status] Item keys: ${item.keys.toList()} ===");
+                          debugPrint("=== [Status] Item data: $item ===");
+
+                          // Coba semua kemungkinan field key logo dari backend
                           String? rawLogo =
-                              item['logo_perusahaan'] ??
-                              item['logo'] ??
-                              item['foto_kafe'];
+                              item['logo_kafe'] ??         // website pakai ini
+                              item['logo_perusahaan'] ??   // fallback 1
+                              item['logo'] ??              // fallback 2
+                              item['foto_kafe'] ??         // fallback 3
+                              item['foto_perusahaan'] ??   // fallback 4
+                              item['perusahaan']?['logo_perusahaan'] ?? // nested
+                              item['kafe']?['logo_kafe'];  // nested fallback
+
+                          debugPrint("=== [Status] Raw logo value: $rawLogo ===");
+
                           String? finalLogoUrl;
-
-                          if (rawLogo != null && rawLogo.isNotEmpty) {
-                            if (rawLogo.startsWith('http://') ||
-                                rawLogo.startsWith('https://')) {
-                              finalLogoUrl = rawLogo;
+                          if (rawLogo != null && rawLogo.toString().isNotEmpty) {
+                            final String raw = rawLogo.toString();
+                            if (raw.startsWith('http://') || raw.startsWith('https://')) {
+                              // Sudah URL lengkap — langsung pakai
+                              finalLogoUrl = raw;
                             } else {
-                              // Memotong string url untuk mendapatkan Domain Utama (Contoh: http://vps-anda.com atau http://10.0.2.2:8000)
-                              final String baseUrl = ApiConfig.riwayatLamaran
-                                  .split('/api')
-                                  .first;
+                              // Path relatif — gabungkan dengan base URL
+                              // Ambil domain dari ApiConfig (potong di '/api')
+                              final String baseUrl = ApiConfig.baseUrl
+                                  .replaceAll(RegExp(r'/api.*$'), '');
+                              final String cleanPath = raw.startsWith('/')
+                                  ? raw.substring(1)
+                                  : raw;
+                              finalLogoUrl = "$baseUrl/storage/$cleanPath";
 
-                              // Membersihkan prefix slash ganda jika backend mengirimkan value diawali dengan '/'
-                              final String cleanPath = rawLogo.startsWith('/')
-                                  ? rawLogo.substring(1)
-                                  : rawLogo;
-
-                              finalLogoUrl = "$baseUrl/$cleanPath";
+                              // Jika sudah ada 'storage/' di path, jangan dobel
+                              if (raw.contains('storage/')) {
+                                finalLogoUrl = "$baseUrl/$cleanPath";
+                              }
                             }
                           }
 
-                          debugPrint(
-                            "=== GENERATED LOGO URL FOR CARD: $finalLogoUrl ===",
-                          );
+                          debugPrint("=== [Status] Final logo URL: $finalLogoUrl ===");
 
+                          // ─── FORMAT TANGGAL (seperti website) ────────────
+                          String rawTanggal =
+                              item['dibuat_pada'] ??
+                              item['tanggal_kirim'] ??
+                              item['created_at'] ??
+                              '';
+                          String displayTanggal = 'Tanggal tidak tersedia';
+                          if (rawTanggal.isNotEmpty) {
+                            try {
+                              final dt = DateTime.parse(rawTanggal).toLocal();
+                              const bulan = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                              displayTanggal = '${dt.day} ${bulan[dt.month]} ${dt.year}';
+                            } catch (_) {
+                              displayTanggal = rawTanggal;
+                            }
+                          }
                           return _buildStatusCard(
                             context,
-                            jobTitle:
-                                item['posisi'] ?? 'Posisi Tidak Diketahui',
+                            jobTitle: item['posisi'] ?? 'Posisi Tidak Diketahui',
                             companyName:
-                                item['nama_perusahaan'] ??
                                 item['nama_kafe'] ??
+                                item['nama_perusahaan'] ??
                                 'Kafe Tidak Diketahui',
                             logoUrl: finalLogoUrl,
-                            date:
-                                item['dibuat_pada'] ??
-                                item['tanggal_kirim'] ??
-                                'Tanggal tidak tersedia',
+                            date: displayTanggal,
                             status:
                                 item['status_saat_ini'] ??
                                 item['status'] ??
@@ -428,11 +452,33 @@ class _StatusScreenState extends State<StatusScreen> {
                         child: Image.network(
                           logoUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => const Icon(
-                            Icons.coffee,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                          width: 50,
+                          height: 50,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (c, e, s) {
+                            debugPrint("=== [Status] Logo gagal dimuat: $logoUrl — Error: $e ===");
+                            return const Icon(
+                              Icons.coffee,
+                              color: Colors.white,
+                              size: 28,
+                            );
+                          },
                         ),
                       )
                     : const Icon(Icons.coffee, color: Colors.white, size: 28),

@@ -2,7 +2,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
 import '../widgets/custom_text_field.dart';
-import '../services/auth_service.dart'; // Pastikan path import ini sesuai
+import '../services/auth_service.dart';
+import '../../main_layout.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -62,6 +63,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showSnackBar(result['message'] ?? "Registrasi gagal");
     }
   }
+
+  Future<void> _handleGoogleSignIn() async {
+  setState(() => _isLoading = true);
+
+  final result = await _authService.signInWithGoogle();
+
+  if (mounted) {
+    setState(() => _isLoading = false);
+  }
+
+  if (!mounted) return;
+
+  if (result['status'] == true) {
+    _showSnackBar(
+      "Login Google berhasil",
+      isSuccess: true,
+    );
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainLayout(),
+      ),
+    );
+    });
+  } else {
+    _showSnackBar(
+      result['message'] ?? "Login Google gagal",
+    );
+  }
+}
 
   void _showSnackBar(String message, {bool isSuccess = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -227,24 +260,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       // Tombol Google
                       OutlinedButton.icon(
-                        onPressed: _isLoading ? null : () {},
-                        icon: const Icon(
-                          Icons.g_mobiledata,
-                          color: Color.fromRGBO(74, 52, 40, 1),
-                          size: 30,
-                        ),
-                        label: const Text(
-                          "Daftar dengan Google",
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          side: const BorderSide(color: Colors.grey),
+                      onPressed: _isLoading
+                          ? null
+                          : _handleGoogleSignIn,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.g_mobiledata,
+                              color: Color.fromRGBO(
+                                74,
+                                52,
+                                40,
+                                1,
+                              ),
+                              size: 30,
+                            ),
+                      label: Text(
+                        _isLoading
+                            ? "Memproses..."
+                            : "Daftar dengan Google",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
                         ),
                       ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(
+                          double.infinity,
+                          50,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(30),
+                        ),
+                        side: const BorderSide(
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
                     ],
                   ),
                 ),

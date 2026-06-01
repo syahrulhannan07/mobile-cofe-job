@@ -10,7 +10,7 @@ import 'perusahaan_screen.dart';
 import 'bantuan_screen.dart';
 import 'profile_screen.dart';
 import 'notification_screen.dart';
-import 'detail_lowongan_screen.dart';
+import '../../jobs/screens/detail_lowongan_screen.dart';
 import 'detail_perusahaan_screen.dart';
 import '../../../core/network/api_config.dart';
 

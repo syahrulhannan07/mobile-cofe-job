@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart'; 
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'features/auth/screens/login_screen.dart';
-import 'features/home/main_layout.dart';
+import 'features/main_layout.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 

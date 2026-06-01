@@ -1,7 +1,7 @@
 // lib/features/home/screens/detail_perusahaan_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
-import 'detail_lowongan_screen.dart';
+import '../../jobs/screens/detail_lowongan_screen.dart';
 
 class DetailPerusahaanScreen extends StatelessWidget {
   final Map<String, dynamic> companyData;

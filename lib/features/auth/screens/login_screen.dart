@@ -8,7 +8,7 @@ import '../widgets/custom_text_field.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
-import '../../home/main_layout.dart';
+import '../../main_layout.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -134,6 +134,84 @@ class _LoginScreenState extends State<LoginScreen> {
       _showMessage("Terjadi kesalahan sistem. Coba lagi nanti.", isError: true);
     }
   }
+
+  Future<void> _handleGoogleLogin() async {
+  setState(() => _isLoading = true);
+
+  try {
+    final result = await _authService.signInWithGoogle();
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    if (!mounted) return;
+
+    if (result['status'] == true) {
+      final userData = result['user'];
+      final String token = result['token'] ?? '';
+
+      if (userData == null || token.isEmpty) {
+        _showMessage(
+          "Gagal memproses data akun Google",
+          isError: true,
+        );
+        return;
+      }
+
+      final String peran =
+          userData["peran"] ?? "";
+
+      if (peran == "Pelamar") {
+
+        await _saveLoginSession(
+          userData,
+          token,
+        );
+
+        await _uploadFcmTokenToBackend(
+          token,
+        );
+
+        _showMessage(
+          "Login Google berhasil",
+        );
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                const MainLayout(),
+          ),
+        );
+
+      } else {
+        _showMessage(
+          "Akses ditolak. Akun ini terdaftar sebagai $peran",
+          isError: true,
+        );
+      }
+    } else {
+      _showMessage(
+        result['message'] ??
+            "Login Google gagal",
+        isError: true,
+      );
+    }
+  } catch (e) {
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    _showMessage(
+      e.toString(),
+      isError: true,
+    );
+  }
+}
 
   void _showMessage(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -304,6 +382,63 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+
+const Text(
+  "Atau",
+  style: TextStyle(
+    fontSize: 12,
+    color: AppColors.textMain,
+  ),
+),
+
+const SizedBox(height: 16),
+
+OutlinedButton.icon(
+  onPressed: _isLoading
+      ? null
+      : _handleGoogleLogin,
+  icon: _isLoading
+      ? const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
+        )
+      : const Icon(
+          Icons.g_mobiledata,
+          size: 30,
+          color: Color.fromRGBO(
+            74,
+            52,
+            40,
+            1,
+          ),
+        ),
+  label: Text(
+    _isLoading
+        ? "Memproses..."
+        : "Masuk dengan Google",
+    style: const TextStyle(
+      color: Colors.grey,
+      fontSize: 14,
+    ),
+  ),
+  style: OutlinedButton.styleFrom(
+    minimumSize: const Size(
+      double.infinity,
+      50,
+    ),
+    shape: RoundedRectangleBorder(
+      borderRadius:
+          BorderRadius.circular(30),
+    ),
+    side: const BorderSide(
+      color: Colors.grey,
+    ),
+  ),
+),
                       ],
                     ),
                   ),

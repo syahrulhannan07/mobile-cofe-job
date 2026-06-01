@@ -1,20 +1,29 @@
 // lib/features/home/main_layout.dart
 import 'package:flutter/material.dart';
-import '../../core/constants/colors.dart';
-import 'screens/beranda_screen.dart';
-import 'screens/lowongan_screen.dart';
-import 'screens/status_screen.dart';
-import 'screens/pengaturan_screen.dart';
+import '../core/constants/colors.dart';
+import 'home/screens/beranda_screen.dart';
+import 'jobs/screens/lowongan_screen.dart';
+import 'application_status/screens/status_screen.dart';
+import 'settings/screens/pengaturan_screen.dart';
 
 class MainLayout extends StatefulWidget {
-  const MainLayout({super.key});
+  /// Gunakan [initialIndex] untuk membuka tab tertentu saat pertama kali masuk.
+  /// 0 = Beranda, 1 = Lowongan, 2 = Status, 3 = Pengaturan
+  final int initialIndex;
+  const MainLayout({super.key, this.initialIndex = 0});
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _currentIndex = 0; // Index halaman yang aktif
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex; // pakai initialIndex dari constructor
+  }
 
   // Daftar halaman yang akan ditampilkan
   final List<Widget> _screens = [

@@ -1,6 +1,6 @@
 import 'dart:io' as io;
 import 'dart:convert';
-import 'package:flutter/foundation.dart'; // Untuk mengecek kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,7 +11,8 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
 // ignore: unused_import
-import 'tracking_timeline_screen.dart';
+import '../../application_status/screens/tracking_timeline_screen.dart';
+import '../../main_layout.dart'; // MainLayout dengan initialIndex
 
 class ApplyJobScreen extends StatefulWidget {
   final String jobId;
@@ -41,11 +42,14 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   List<dynamic> pertanyaanSeleksi = [];
 
   // Mapping Dokumen Tahap 1
+  // uploadedFiles     : bytes untuk preview lokal (tidak dikirim ulang saat submit)
+  // uploadedFileNames : nama file untuk tampilan UI
+  // uploadedDokumenIds: set id_jenis_dokumen yang SUDAH berhasil terupload ke server
   Map<String, Uint8List> uploadedFiles = {};
   Map<String, String> uploadedFileNames = {};
+  Set<String> uploadedDokumenIds = {};   // ← track mana yang sudah naik ke server
 
   // Mapping Jawaban Tahap 2: { id_pertanyaan (String) → TextEditingController }
-  // SATU map ini saja yang digunakan, _jawabanControllers dihapus (redundan)
   Map<String, TextEditingController> pertanyaanControllers = {};
 
   // --- DATA STATE TAHAP 3 (Profil Pelamar Lengkap Sesuai Profile Screen) ---
@@ -685,7 +689,10 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         ) ?? false;
   }
 
-  // Pengambilan Dokumen Tahap 1
+  // ==========================================
+  // UPLOAD DOKUMEN — langsung kirim ke server saat user pilih file
+  // (mengikuti alur website: Step1Upload upload per-file saat onChange)
+  // ==========================================
   Future<void> _pickFile(String idJenisDokumen) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -693,18 +700,91 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       withData: true,
     );
 
-    if (result != null) {
-      final fileData = result.files.single;
-      Uint8List? fileBytes = fileData.bytes;
+    if (result == null) return;
 
-      if (fileBytes != null) {
-        setState(() {
-          uploadedFiles[idJenisDokumen] = fileBytes;
-          uploadedFileNames[idJenisDokumen] = fileData.name;
-        });
+    final fileData = result.files.single;
+    final Uint8List? fileBytes = fileData.bytes;
+
+    if (fileBytes == null) {
+      _showValidationError("Gagal membaca data file.");
+      return;
+    }
+
+    if (idLamaran == null) {
+      _showValidationError("ID lamaran belum siap. Tunggu sebentar dan coba lagi.");
+      return;
+    }
+
+    // Simpan lokal dulu untuk UI
+    setState(() {
+      uploadedFiles[idJenisDokumen] = fileBytes;
+      uploadedFileNames[idJenisDokumen] = fileData.name;
+      uploadedDokumenIds.remove(idJenisDokumen); // reset status upload jika ganti file
+    });
+
+    // Upload ke server sekarang — format: dokumen[] + id_jenis_dokumen[]
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+
+      String fileName = fileData.name;
+      String ext = fileName.split('.').last.toLowerCase();
+      String mimeType = ext == 'pdf'
+          ? 'application/pdf'
+          : (ext == 'png' ? 'image/png' : 'image/jpeg');
+
+      debugPrint("=== [Upload] Upload dokumen id=$idJenisDokumen → $fileName ===");
+
+      var uri = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/dokumen");
+      var request = http.MultipartRequest('POST', uri);
+      request.headers.addAll({
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      });
+
+      // ─── Format array persis seperti website ───────────────────────────
+      // website kirim: FormData dengan dokumen[] dan id_jenis_dokumen[]
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'dokumen[]',
+          fileBytes,
+          filename: fileName,
+          contentType: MediaType.parse(mimeType),
+        ),
+      );
+      request.fields['id_jenis_dokumen[]'] = idJenisDokumen;
+
+      var streamed = await request.send();
+      var response = await http.Response.fromStream(streamed);
+
+      debugPrint("=== [Upload] Status: ${response.statusCode}, Body: ${response.body} ===");
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        setState(() => uploadedDokumenIds.add(idJenisDokumen));
+        _showValidationSuccess("Dokumen berhasil diunggah.");
+        debugPrint("=== [Upload] ✅ Dokumen $idJenisDokumen berhasil diunggah ke server ===");
       } else {
-        _showValidationError("Gagal membaca data file.");
+        // Upload gagal — hapus dari lokal juga agar user tahu harus coba lagi
+        setState(() {
+          uploadedFiles.remove(idJenisDokumen);
+          uploadedFileNames.remove(idJenisDokumen);
+        });
+        String errMsg = "Gagal mengunggah dokumen.";
+        try {
+          final err = jsonDecode(response.body);
+          errMsg = err['message'] ?? err['error'] ?? errMsg;
+        } catch (_) {}
+        _showValidationError(errMsg);
       }
+    } catch (e) {
+      setState(() {
+        uploadedFiles.remove(idJenisDokumen);
+        uploadedFileNames.remove(idJenisDokumen);
+      });
+      _showValidationError("Terjadi kesalahan saat mengunggah: $e");
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -729,8 +809,8 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       for (var doc in dokumenWajib) {
         bool isWajib = doc['wajib'] == true || doc['wajib'] == 1;
         String idDoc = doc['id_jenis_dokumen'].toString();
-        if (isWajib && !uploadedFiles.containsKey(idDoc)) {
-          _showValidationError("Dokumen ${doc['nama_dokumen']} wajib diunggah sebelum melanjutkan.");
+        if (isWajib && !uploadedDokumenIds.contains(idDoc)) {
+          _showValidationError("Dokumen ${doc['nama_dokumen']} wajib diunggah dan harus berhasil tersimpan sebelum melanjutkan.");
           return false;
         }
       }
@@ -812,12 +892,14 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
 
   // ========================================================
   // PROSES KIRIM LAMARAN
+  // Dokumen SUDAH terupload saat Step 1 (mengikuti alur website).
+  // Di sini hanya: 1) simpan jawaban  2) finalisasi kirim
   // ========================================================
   Future<void> _submitFormFormLamaran() async {
     setState(() => _isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString("token");
+      final String? token = prefs.getString("token");
 
       if (idLamaran == null) {
         _showValidationError("ID lamaran tidak valid. Coba keluar dan masuk kembali.");
@@ -825,140 +907,60 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         return;
       }
 
-      debugPrint("=== [Submit] Mulai pengiriman lamaran ID: $idLamaran ===");
-      debugPrint("=== [Submit] Jumlah pertanyaan: ${pertanyaanSeleksi.length} ===");
-      debugPrint("=== [Submit] Jumlah controller: ${pertanyaanControllers.length} ===");
+      debugPrint("=== [Submit] Mulai kirim lamaran ID: $idLamaran ===");
 
-      // ─── STEP 1: Unggah Berkas Dokumen Tahap 1 ────────────────────────
-      // ─── STEP 1: Unggah Berkas Dokumen (satu per satu per file) ──────────
-      if (uploadedFiles.isNotEmpty) {
-        debugPrint("=== [Submit] Mengunggah ${uploadedFiles.length} dokumen satu per satu... ===");
-        var uriDokumen = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/dokumen");
-
-        for (var entry in uploadedFiles.entries) {
-          String idDoc = entry.key;       // contoh: "1", "6", "5"
-          String fileName = uploadedFileNames[idDoc] ?? "dokumen.pdf";
-          String ext = fileName.split('.').last.toLowerCase();
-          String mimeType = ext == 'pdf'
-              ? 'application/pdf'
-              : (ext == 'png' ? 'image/png' : 'image/jpeg');
-
-          debugPrint("=== [Submit] Upload dokumen id_jenis_dokumen=$idDoc → $fileName ===");
-
-          var docRequest = http.MultipartRequest('POST', uriDokumen);
-          docRequest.headers.addAll({
-            "Accept": "application/json",
-            "Authorization": "Bearer $token",
-          });
-
-          // Field file: nama field = 'dokumen'
-          docRequest.files.add(
-            http.MultipartFile.fromBytes(
-              'dokumen',
-              entry.value,
-              filename: fileName,
-              contentType: MediaType.parse(mimeType),
-            ),
-          );
-
-          // Field text: id_jenis_dokumen
-          docRequest.fields['id_jenis_dokumen'] = idDoc;
-
-          var docStreamedRes = await docRequest.send();
-          var docResponse = await http.Response.fromStream(docStreamedRes);
-
-          debugPrint("=== [Submit] Dokumen $idDoc status: ${docResponse.statusCode} ===");
-          debugPrint("=== [Submit] Dokumen $idDoc body: ${docResponse.body} ===");
-
-          if (docResponse.statusCode != 200 && docResponse.statusCode != 201) {
-            String errMsg = "Gagal mengunggah dokumen '$fileName'.";
-            try {
-              final err = jsonDecode(docResponse.body);
-              errMsg = err['message'] ?? err['error'] ?? errMsg;
-            } catch (_) {}
-            _showValidationError(errMsg);
-            setState(() => _isLoading = false);
-            return;
-          }
-        }
-        debugPrint("=== [Submit] ✅ Semua dokumen berhasil diunggah. ===");
-      } else {
-        debugPrint("=== [Submit] Tidak ada dokumen untuk diunggah. ===");
-      }
-
-      // ─── STEP 2: Simpan Jawaban Kuesioner ─────────────────────────────
+      // ─── STEP 1: Simpan Jawaban Pertanyaan Seleksi ────────────────────
+      // Format: raw array  [{"id_pertanyaan": X, "jawaban": "..."}]
+      // (persis seperti layananLamaran.simpanJawaban di website)
       List<Map<String, dynamic>> listJawaban = [];
       pertanyaanControllers.forEach((idPertanyaan, controller) {
-        String jawaban = controller.text.trim();
-        int? idInt = int.tryParse(idPertanyaan);
+        final int? idInt = int.tryParse(idPertanyaan);
         if (idInt != null) {
-          listJawaban.add({"id_pertanyaan": idInt, "jawaban": jawaban});
-          debugPrint("=== [Submit] Jawaban id=$idInt: '$jawaban' ===");
+          listJawaban.add({
+            "id_pertanyaan": idInt,
+            "jawaban": controller.text.trim(),
+          });
         }
       });
 
-      debugPrint("=== [Submit] Total jawaban: ${listJawaban.length} ===");
+      debugPrint("=== [Submit] Jawaban: ${jsonEncode(listJawaban)} ===");
 
       if (listJawaban.isNotEmpty) {
-        var uriJawaban = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/jawaban");
-        bool jawabanBerhasil = false;
+        final uriJawaban = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/jawaban");
 
-        // Format A: raw array  → body = [{"id_pertanyaan":X,"jawaban":"..."},...]
-        final bodyA = jsonEncode(listJawaban);
-        debugPrint("=== [Submit] Coba format A (array): $bodyA ===");
-        var resA = await http.post(uriJawaban,
-            headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
-            body: bodyA);
-        debugPrint("=== [Submit] Format A status: ${resA.statusCode}, body: ${resA.body} ===");
-        if (resA.statusCode == 200 || resA.statusCode == 201) jawabanBerhasil = true;
+        // Backend expect: {"jawaban": [{"id_pertanyaan": X, "jawaban": "..."}]}
+        final bodyJawaban = jsonEncode({"jawaban": listJawaban});
+        debugPrint("=== [Submit] Body jawaban: $bodyJawaban ===");
 
-        // Format B: wrapped object  → body = {"jawaban":[...]}
-        if (!jawabanBerhasil) {
-          final bodyB = jsonEncode({"jawaban": listJawaban});
-          debugPrint("=== [Submit] Coba format B (wrapped): $bodyB ===");
-          var resB = await http.post(uriJawaban,
-              headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
-              body: bodyB);
-          debugPrint("=== [Submit] Format B status: ${resB.statusCode}, body: ${resB.body} ===");
-          if (resB.statusCode == 200 || resB.statusCode == 201) jawabanBerhasil = true;
-        }
+        final resJawaban = await http.post(
+          uriJawaban,
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+          body: bodyJawaban,
+        );
 
-        // Format C: kirim satu per satu sebagai POST individual
-        if (!jawabanBerhasil) {
-          debugPrint("=== [Submit] Coba format C (satu per satu)... ===");
-          bool semuaBerhasil = true;
-          for (var item in listJawaban) {
-            final bodyItem = jsonEncode(item);
-            var resItem = await http.post(uriJawaban,
-                headers: {"Accept": "application/json", "Content-Type": "application/json", "Authorization": "Bearer $token"},
-                body: bodyItem);
-            debugPrint("=== [Submit] Item id=${item['id_pertanyaan']} status: ${resItem.statusCode}, body: ${resItem.body} ===");
-            if (resItem.statusCode != 200 && resItem.statusCode != 201) {
-              semuaBerhasil = false;
-              String errMsg = "Gagal menyimpan jawaban.";
-              try { errMsg = jsonDecode(resItem.body)['message'] ?? errMsg; } catch (_) {}
-              _showValidationError(errMsg);
-              setState(() => _isLoading = false);
-              return;
-            }
-          }
-          if (semuaBerhasil) jawabanBerhasil = true;
-        }
+        debugPrint("=== [Submit] Jawaban status: ${resJawaban.statusCode} ===");
+        debugPrint("=== [Submit] Jawaban body: ${resJawaban.body} ===");
 
-        if (!jawabanBerhasil) {
-          _showValidationError("Gagal menyimpan jawaban seleksi. Coba lagi.");
+        if (resJawaban.statusCode != 200 && resJawaban.statusCode != 201) {
+          String errMsg = "Gagal menyimpan jawaban seleksi.";
+          try { errMsg = jsonDecode(resJawaban.body)['message'] ?? errMsg; } catch (_) {}
+          _showValidationError(errMsg);
           setState(() => _isLoading = false);
           return;
         }
-        debugPrint("=== [Submit] ✅ Jawaban berhasil disimpan. ===");
+        debugPrint("=== [Submit] ✅ Jawaban tersimpan. ===");
       } else {
         debugPrint("=== [Submit] Tidak ada pertanyaan, skip jawaban. ===");
       }
 
-      // ─── STEP 3: Finalisasi / Kirim Lamaran ───────────────────────────
+      // ─── STEP 2: Finalisasi / Kirim Lamaran ───────────────────────────
       debugPrint("=== [Submit] Finalisasi lamaran... ===");
-      var uriKirim = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/kirim");
-      var responseKirim = await http.post(
+      final uriKirim = Uri.parse("${ApiConfig.baseUrl}/lamaran/$idLamaran/kirim");
+      final resKirim = await http.post(
         uriKirim,
         headers: {
           "Accept": "application/json",
@@ -967,24 +969,20 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         },
       );
 
-      debugPrint("=== [Submit] Kirim status: ${responseKirim.statusCode} ===");
-      debugPrint("=== [Submit] Kirim body: ${responseKirim.body} ===");
+      debugPrint("=== [Submit] Kirim status: ${resKirim.statusCode} ===");
+      debugPrint("=== [Submit] Kirim body: ${resKirim.body} ===");
 
-      if (responseKirim.statusCode == 200 || responseKirim.statusCode == 201) {
+      if (resKirim.statusCode == 200 || resKirim.statusCode == 201) {
         setState(() => currentStep = 5);
         _animationController.forward();
         debugPrint("=== [Submit] ✅ Lamaran berhasil dikirim! ===");
       } else {
         String errMsg = "Gagal menyelesaikan pengiriman lamaran.";
-        try {
-          final errorData = jsonDecode(responseKirim.body);
-          errMsg = errorData['message'] ?? errorData['error'] ?? errMsg;
-        } catch (_) {}
+        try { errMsg = jsonDecode(resKirim.body)['message'] ?? errMsg; } catch (_) {}
         _showValidationError(errMsg);
       }
-    } catch (e, stackTrace) {
-      debugPrint("=== [Submit] ERROR: $e ===");
-      debugPrint("=== [Submit] StackTrace: $stackTrace ===");
+    } catch (e, st) {
+      debugPrint("=== [Submit] ERROR: $e\n$st ===");
       _showValidationError("Terjadi kesalahan: ${e.toString().replaceAll('Exception:', '').trim()}");
     } finally {
       setState(() => _isLoading = false);
@@ -1054,17 +1052,37 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
       children: [
         const SizedBox(height: 20),
         const Text("Silakan lengkapi dokumen persyaratan di bawah ini untuk memulai perjalanan kariermu.", style: TextStyle(fontSize: 14, color: AppColors.textMain, height: 1.5)),
-        const SizedBox(height: 25),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8EC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFF0B85E).withOpacity(0.4)),
+          ),
+          child: const Row(children: [
+            Icon(Icons.info_outline_rounded, color: Color(0xFFF0B85E), size: 16),
+            SizedBox(width: 8),
+            Expanded(child: Text("Dokumen diunggah langsung saat Anda memilih file. Tunggu hingga muncul tanda ✓ sebelum lanjut.", style: TextStyle(fontSize: 11, color: Color(0xFF7A5C2E)))),
+          ]),
+        ),
+        const SizedBox(height: 20),
         ...dokumenWajib.map((doc) {
           String idDoc = doc['id_jenis_dokumen'].toString();
           bool isWajib = doc['wajib'] == true || doc['wajib'] == 1;
+          bool isUploaded = uploadedDokumenIds.contains(idDoc);
+          bool isPending = uploadedFiles.containsKey(idDoc) && !isUploaded;
           String labelWajib = isWajib ? " (Wajib)" : " (Opsional)";
+          String subtitleText = isUploaded
+              ? uploadedFileNames[idDoc] ?? "Tersimpan"
+              : (isPending ? "Sedang diunggah..." : "Ketuk untuk memilih berkas");
           return _buildUploadCard(
             Icons.description_rounded,
             "${doc['nama_dokumen']}$labelWajib",
-            uploadedFileNames[idDoc] ?? "Ketuk untuk memilih berkas",
+            subtitleText,
             () => _pickFile(idDoc),
-            isUploaded: uploadedFiles.containsKey(idDoc),
+            isUploaded: isUploaded,
+            isPending: isPending,
           );
         }),
         const SizedBox(height: 30),
@@ -1140,10 +1158,16 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
   }
 
   Widget _buildStep3Profile() {
-    ImageProvider profileImageProvider = const NetworkImage('https://via.placeholder.com/150');
-    if (kIsWeb && _profileImageBytes != null) profileImageProvider = MemoryImage(_profileImageBytes!);
-    else if (!kIsWeb && _profileImagePath != null) profileImageProvider = FileImage(io.File(_profileImagePath!));
-    else if (_networkProfileImageUrl != null && _networkProfileImageUrl!.isNotEmpty) profileImageProvider = NetworkImage(_networkProfileImageUrl!);
+    ImageProvider profileImageProvider;
+    if (kIsWeb && _profileImageBytes != null) {
+      profileImageProvider = MemoryImage(_profileImageBytes!);
+    } else if (!kIsWeb && _profileImagePath != null) {
+      profileImageProvider = FileImage(io.File(_profileImagePath!));
+    } else if (_networkProfileImageUrl != null && _networkProfileImageUrl!.isNotEmpty) {
+      profileImageProvider = NetworkImage(_networkProfileImageUrl!);
+    } else {
+      profileImageProvider = const AssetImage('assets/images/placeholder_avatar.png');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1152,7 +1176,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         Center(
           child: Stack(
             children: [
-              CircleAvatar(radius: 50, backgroundColor: Colors.grey.shade300, backgroundImage: profileImageProvider),
+              _buildSafeAvatar(radius: 50, imageProvider: profileImageProvider),
               if (_isEditingMaster)
                 Positioned(
                   bottom: 0, right: 0,
@@ -1398,12 +1422,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
             children: [
               Stack(
                 children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage: reviewImageProvider,
-                    onBackgroundImageError: (_, __) {},
-                  ),
+                  _buildSafeAvatar(radius: 36, imageProvider: reviewImageProvider),
                   Positioned(
                     bottom: 0, right: 0,
                     child: GestureDetector(
@@ -1701,7 +1720,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
                     String idDoc = doc['id_jenis_dokumen'].toString();
                     bool isWajib = doc['wajib'] == true || doc['wajib'] == 1;
                     String fileName = uploadedFileNames[idDoc] ?? "";
-                    bool uploaded = fileName.isNotEmpty;
+                    bool uploaded = uploadedDokumenIds.contains(idDoc); // cek server-confirmed
 
                     return Column(
                       children: [
@@ -1767,6 +1786,38 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     );
   }
 
+  // Helper: avatar aman — tampilkan inisial jika gambar gagal/tidak ada
+  Widget _buildSafeAvatar({required double radius, required ImageProvider imageProvider}) {
+    final bool isAssetFallback = imageProvider is AssetImage;
+    final String initials = _namaController.text.isNotEmpty
+        ? _namaController.text.trim().split(' ').take(2).map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join()
+        : '?';
+
+    if (isAssetFallback) {
+      // Tidak ada foto — tampilkan lingkaran dengan inisial
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: const Color(0xFFF0B85E).withOpacity(0.2),
+        child: Text(initials, style: TextStyle(fontSize: radius * 0.5, fontWeight: FontWeight.bold, color: const Color(0xFF8B5E3C))),
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFFF0B85E).withOpacity(0.2),
+      child: ClipOval(
+        child: Image(
+          image: imageProvider,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Text(initials,
+              style: TextStyle(fontSize: radius * 0.5, fontWeight: FontWeight.bold, color: const Color(0xFF8B5E3C))),
+        ),
+      ),
+    );
+  }
+
   // Helper: decoration untuk review card
   BoxDecoration _reviewCardDecoration() {
     return BoxDecoration(
@@ -1829,31 +1880,71 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
     );
   }
 
-  Widget _buildUploadCard(IconData icon, String title, String subtitle, VoidCallback onTap, {bool isUploaded = false}) {
+  Widget _buildUploadCard(IconData icon, String title, String subtitle, VoidCallback onTap, {bool isUploaded = false, bool isPending = false}) {
+    Color borderColor = isUploaded
+        ? Colors.green.shade300
+        : (isPending ? Colors.orange.shade300 : Colors.grey.shade300);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F7F2),
+        color: isUploaded
+            ? Colors.green.shade50
+            : (isPending ? Colors.orange.shade50 : const Color(0xFFF9F7F2)),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isUploaded ? Colors.green.shade300 : Colors.grey.shade300),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 30, color: const Color(0xFFB8860B)),
+          Stack(
+            children: [
+              Icon(icon, size: 30, color: const Color(0xFFB8860B)),
+              if (isUploaded)
+                Positioned(
+                  right: -2, bottom: -2,
+                  child: Container(
+                    width: 14, height: 14,
+                    decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                    child: const Icon(Icons.check, size: 10, color: Colors.white),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                Row(children: [
+                  if (isPending) ...[
+                    const SizedBox(width: 0),
+                    SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.orange.shade400)),
+                    const SizedBox(width: 5),
+                  ],
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isUploaded ? Colors.green.shade700 : (isPending ? Colors.orange.shade700 : Colors.grey),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ]),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(backgroundColor: isUploaded ? Colors.green : const Color(0xFFF0B85E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), padding: const EdgeInsets.symmetric(horizontal: 16)),
+            onPressed: isPending ? null : onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isUploaded ? Colors.green : (isPending ? Colors.orange.shade300 : const Color(0xFFF0B85E)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
             child: Text(isUploaded ? "Ganti" : "Pilih", style: const TextStyle(fontSize: 12, color: Colors.white)),
           ),
         ],
@@ -2145,9 +2236,11 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
+                      Navigator.pushAndRemoveUntil(
                         context,
-                        '/status-lamaran',
+                        MaterialPageRoute(
+                          builder: (_) => const MainLayout(initialIndex: 2),
+                        ),
                         (route) => false,
                       );
                     },
@@ -2176,9 +2269,11 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
+                      Navigator.pushAndRemoveUntil(
                         context,
-                        '/beranda',
+                        MaterialPageRoute(
+                          builder: (_) => const MainLayout(initialIndex: 0),
+                        ),
                         (route) => false,
                       );
                     },
