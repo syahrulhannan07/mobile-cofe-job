@@ -12,7 +12,20 @@
           "package_name": "com.example.cofe_job"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "234748322219-9p50jjc7nq1e483aab1min334aiie182.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cofe_job",
+            "certificate_hash": "82f241ff3555b80cad590a95887c9a7f2fedf073"
+          }
+        },
+        {
+          "client_id": "234748322219-2mk7gl6h9s7q5uhis7am87a1p7c68soq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyABpNgm0jaOgnChTixoKU2lyCgQpR7GEQM"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "234748322219-2mk7gl6h9s7q5uhis7am87a1p7c68soq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
