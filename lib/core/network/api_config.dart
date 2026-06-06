@@ -1,7 +1,7 @@
 class ApiConfig {
   // Base URL Utama (Cukup ganti di sini jika pindah server/lokal)
   static const String baseUrl =
-      'https://cofe-job.cicd.my.id/api/v1'; // Contoh IP
+      'http://127.0.0.1:8000/api/v1'; // Contoh IP
   // static const String baseUrl = 'http://localhost:8000/api'; // Contoh Chrome Web
 
   // --- DAFTAR ROUTE / ENDPOINT API ---

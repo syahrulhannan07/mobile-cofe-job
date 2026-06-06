@@ -19,6 +19,7 @@ class TrackingTimelineScreen extends StatefulWidget {
 
 class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
   bool _isLoading = true;
+  bool _submitting = false; // [UPDATE LOGIC] state tombol konfirmasi
   String? _errorMessage;
 
   Map<String, dynamic>? _data;
@@ -49,7 +50,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
       debugPrint("Targeted URL: $targetedUrl");
 
       final response = await http.get(
-        Uri.parse(ApiConfig.detailLamaran(widget.lamaranId)),
+        Uri.parse(targetedUrl),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -70,6 +71,9 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
             _data = apiData;
             _wawancara = apiData['wawancara'];
 
+            debugPrint("=== API DATA logo_kafe ===");
+            debugPrint("logo_kafe: ${apiData['logo_kafe']}");
+            debugPrint("nama_kafe: ${apiData['nama_kafe']}");
             if (apiData['timeline'] != null && apiData['timeline'] is List) {
               final rawTimeline = apiData['timeline'] as List;
 
@@ -125,6 +129,56 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
       return DateFormat("dd MMMM yyyy", "id_ID").format(dateTime);
     } catch (e) {
       return tanggalRaw;
+    }
+  }
+
+  // [UPDATE LOGIC] Handler konfirmasi wawancara — sesuai website React
+  Future<void> _handleKonfirmasi(BuildContext ctx) async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/pelamar/lamaran/${widget.lamaranId}/konfirmasi-wawancara',
+      );
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final json = jsonDecode(response.body);
+      if (!mounted) return;
+      if (json['status'] == 'success') {
+        Navigator.pop(ctx);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Terima kasih! Konfirmasi Anda telah terkirim ke perusahaan.'),
+            backgroundColor: Color(0xFF3D2722),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal mengirim konfirmasi. Silakan coba lagi nanti.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error konfirmasi: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal mengirim konfirmasi. Silakan coba lagi nanti.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -404,9 +458,10 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _submitting ? null : () => _handleKonfirmasi(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFBB041),
+                        disabledBackgroundColor: const Color(0xFFFBB041).withValues(alpha: 0.5),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 28,
                           vertical: 12,
@@ -416,14 +471,23 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        "Konfirmasi",
-                        style: TextStyle(
-                          color: Color(0xFF3D2722),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF3D2722),
+                              ),
+                            )
+                          : const Text(
+                              "Konfirmasi",
+                              style: TextStyle(
+                                color: Color(0xFF3D2722),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -540,7 +604,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Detail Status",
+          "Tracking Timeline",
           style: TextStyle(
             color: AppColors.brownDark,
             fontWeight: FontWeight.bold,
@@ -645,13 +709,46 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
     );
   }
 
+  /// Membangun URL logo persis seperti logika website React:
+  ///   logo.startsWith('http') || logo.startsWith('/') → pakai apa adanya (disambung storageRoot)
+  ///   selain itu → '/storage/' + logo
+  ///
+  /// Website memakai path relatif dari domain-nya sendiri (/storage/...).
+  /// Di Flutter kita perlu storageRoot = root domain Laravel (bukan endpoint /api/...).
+  /// Contoh: ApiConfig.baseUrl = "https://api.example.com/api"
+  ///         → storageRoot      = "https://api.example.com"
+  String _buildLogoUrl(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    final s = raw.trim();
+
+    // Sudah URL lengkap → langsung pakai
+    if (s.startsWith('http://') || s.startsWith('https://')) return s;
+
+    // Hitung storageRoot: buang segmen "/api" (atau "/api/v1" dll) dari baseUrl
+    // agar sejajar dengan cara website memakai path relatif dari root domain.
+    String base = ApiConfig.baseUrl.trim();
+    if (base.endsWith('/')) base = base.substring(0, base.length - 1);
+
+    // Buang suffix "/api", "/api/v1", "/api/v2" dsb jika ada
+    final apiSuffixPattern = RegExp(r'(/api(/v\d+)?)$');
+    final storageRoot = base.replaceFirst(apiSuffixPattern, '');
+
+    // Sama persis dengan kondisi website:
+    // logo.startsWith('/') → storageRoot + logo
+    if (s.startsWith('/')) return '$storageRoot$s';
+
+    // Selain itu → storageRoot + '/storage/' + logo
+    return '$storageRoot/storage/$s';
+  }
+
   Widget _buildHeaderCard(String tanggalLamar) {
     final String? logoKafe = _data?['logo_kafe'];
-    final String? logoUrl = logoKafe != null
-        ? (logoKafe.startsWith('http') || logoKafe.startsWith('/')
-            ? logoKafe
-            : '${ApiConfig.baseUrl}/storage/$logoKafe')
-        : null;
+    final String logoUrl = _buildLogoUrl(logoKafe);
+
+    debugPrint("=== LOGO DEBUG ===");
+    debugPrint("logo_kafe raw   : $logoKafe");
+    debugPrint("logo_kafe url   : $logoUrl");
+    debugPrint("ApiConfig.base  : ${ApiConfig.baseUrl}");
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -665,7 +762,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Logo Perusahaan
+          // Logo Perusahaan — persis seperti website
           Container(
             width: 70,
             height: 70,
@@ -674,20 +771,47 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             clipBehavior: Clip.antiAlias,
-            child: logoUrl != null
+            child: logoUrl.isNotEmpty
                 ? Image.network(
                     logoUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(
+                    headers: const {
+                      'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint("Logo gagal dimuat: $error");
+                      debugPrint("URL yang dicoba  : $logoUrl");
+                      // Fallback: icon toko (setara placeholderProfile di website)
+                      return Container(
+                        color: const Color(0xFFC69C6D),
+                        child: const Icon(
+                          Icons.store_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      );
+                    },
+                  )
+                : Container(
+                    color: const Color(0xFFC69C6D),
+                    child: const Icon(
                       Icons.store_rounded,
                       color: Colors.white,
                       size: 32,
                     ),
-                  )
-                : const Icon(
-                    Icons.store_rounded,
-                    color: Colors.white,
-                    size: 32,
                   ),
           ),
           const SizedBox(width: 14),

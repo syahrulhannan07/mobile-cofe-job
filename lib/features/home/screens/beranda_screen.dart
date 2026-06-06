@@ -27,6 +27,9 @@ class _BerandaScreenState extends State<BerandaScreen> {
 
   late Future<Map<String, dynamic>> _berandaData;
 
+  // Jumlah notifikasi belum dibaca untuk badge lonceng
+  int _unreadCount = 0;
+
   // Controller untuk Auto Scroll Banner
   final PageController _pageController = PageController(initialPage: 0);
   int _currentPage = 0;
@@ -44,6 +47,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
     _loadUserData();
     _startAutoScroll();
     _berandaData = fetchBerandaData(); // Ambil data gabungan dari DB saat init
+    _fetchUnreadCount(); // Ambil jumlah notif belum dibaca untuk badge
   }
 
   @override
@@ -78,6 +82,32 @@ class _BerandaScreenState extends State<BerandaScreen> {
       userEducation =
           prefs.getString("user_education") ?? "Pendidikan belum diatur";
     });
+  }
+
+  // Mengambil jumlah notifikasi yang belum dibaca untuk badge lonceng
+  Future<void> _fetchUnreadCount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null || token.isEmpty) return;
+
+      final response = await http.get(
+        Uri.parse(ApiConfig.notificationsEndpoint),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> list = data['data'] ?? [];
+        final int count = list.where((n) => n['dibaca'] == false).length;
+        if (mounted) setState(() => _unreadCount = count);
+      }
+    } catch (_) {
+      // Gagal fetch badge tidak perlu tampilkan error ke UI
+    }
   }
 
   // Fungsi Tunggal untuk Fetch Data Gabungan Beranda
@@ -220,21 +250,62 @@ class _BerandaScreenState extends State<BerandaScreen> {
                           ),
                           Row(
                             children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.notifications_none_rounded,
-                                  color: AppColors.textMain,
-                                  size: 28,
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const NotificationScreen(),
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.notifications_none_rounded,
+                                      color: AppColors.textMain,
+                                      size: 28,
                                     ),
-                                  );
-                                },
+                                    onPressed: () async {
+                                      // Badge TIDAK di-reset saat masuk — hanya berkurang
+                                      // satu per satu saat user klik masing-masing notif.
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => NotificationScreen(
+                                            onUnreadChanged: (count) {
+                                              // Dipanggil real-time tiap notif diklik di dalam halaman notifikasi
+                                              if (mounted) setState(() => _unreadCount = count);
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                      // Setelah kembali, sync ulang dari server untuk akurasi
+                                      _fetchUnreadCount();
+                                    },
+                                  ),
+                                  if (_unreadCount > 0)
+                                    Positioned(
+                                      right: 6,
+                                      top: 6,
+                                      child: IgnorePointer(
+                                        child: Container(
+                                          padding: const EdgeInsets.all(3),
+                                          constraints: const BoxConstraints(
+                                            minWidth: 18,
+                                            minHeight: 18,
+                                          ),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFE53935),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Text(
+                                            _unreadCount > 99 ? '99+' : '$_unreadCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              height: 1.1,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                               const SizedBox(width: 4),
                               GestureDetector(

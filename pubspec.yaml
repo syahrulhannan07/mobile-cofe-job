@@ -45,7 +45,7 @@ dependencies:
   firebase_messaging: ^16.2.2
   dio: ^5.9.2
   firebase_auth: ^6.5.2
-  google_sign_in: ^7.2.0
+  google_sign_in: ^6.3.0
 
 dev_dependencies:
   flutter_test:

@@ -7,7 +7,11 @@ import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 IMPORT REPL
 import 'dart:async';
 
 class NotificationScreen extends StatefulWidget {
-  const NotificationScreen({super.key});
+  /// Dipanggil setiap kali jumlah notif belum-dibaca berubah (misal: user klik notif).
+  /// Beranda menggunakan ini untuk update badge secara real-time tanpa re-fetch.
+  final void Function(int unreadCount)? onUnreadChanged;
+
+  const NotificationScreen({super.key, this.onUnreadChanged});
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -197,6 +201,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  // Memformat jam dari ISO string → "HH:mm"
   String _formatTime(String? dateStr) {
     if (dateStr == null) return "Baru saja";
     try {
@@ -205,6 +210,77 @@ class _NotificationScreenState extends State<NotificationScreen> {
     } catch (_) {
       return "Baru saja";
     }
+  }
+
+  // Menghitung jumlah notif yang belum dibaca dari list lokal
+  int _countUnread() => _notifications.where((n) => n['dibaca'] == false).length;
+
+  // Menandai satu notifikasi sebagai sudah dibaca (lokal + API) lalu notify beranda
+  Future<void> _markAsRead(int listIndex) async {
+    final notif = _notifications[listIndex];
+    if (notif['dibaca'] == true) return; // sudah dibaca, skip
+
+    // 1. Update UI lokal dulu (optimistic) agar terasa responsif
+    setState(() {
+      _notifications[listIndex]['dibaca'] = true;
+    });
+
+    // 2. Beritahu beranda jumlah unread terbaru lewat callback
+    widget.onUnreadChanged?.call(_countUnread());
+
+    // 3. Sinkronkan ke server (best-effort, tidak blokir UI)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final id = notif['id']?.toString() ?? '';
+      if (token == null || id.isEmpty) return;
+      await http.post(
+        Uri.parse('${ApiConfig.notificationsEndpoint}/$id/baca'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+    } catch (e) {
+      debugPrint('[Notif] Gagal mark-read ke server: $e');
+    }
+  }
+
+  // Menentukan label grup berdasarkan tanggal notifikasi
+  String _groupLabel(String? dateStr) {
+    if (dateStr == null) return "Sebelumnya";
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final notifDay = DateTime(dt.year, dt.month, dt.day);
+      if (notifDay == today) return "Hari Ini";
+      if (notifDay == yesterday) return "Kemarin";
+      // Format tanggal lama: "Senin, 02 Juni 2025"
+      const List<String> dayNames = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+      const List<String> monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      final dayName = dayNames[dt.weekday - 1];
+      final monthName = monthNames[dt.month - 1];
+      return "$dayName, ${dt.day.toString().padLeft(2, '0')} $monthName ${dt.year}";
+    } catch (_) {
+      return "Sebelumnya";
+    }
+  }
+
+  // Mengelompokkan notifikasi berdasarkan label tanggal
+  List<Map<String, dynamic>> _buildGroupedItems(List<dynamic> notifications) {
+    final List<Map<String, dynamic>> grouped = [];
+    String? lastLabel;
+    for (final notif in notifications) {
+      final label = _groupLabel(notif['dibuat_pada'] ?? notif['created_at']);
+      if (label != lastLabel) {
+        grouped.add({'_isHeader': true, '_label': label});
+        lastLabel = label;
+      }
+      grouped.add({'_isHeader': false, ...Map<String, dynamic>.from(notif)});
+    }
+    return grouped;
   }
 
   @override
@@ -279,95 +355,155 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             ),
                           ],
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                          itemCount: _notifications.length,
-                          itemBuilder: (context, index) {
-                            final notif = _notifications[index];
-                            final String displayJudul = notif['judul'] ?? 'Pemberitahuan';
-                            final String displayPesan = notif['pesan'] ?? 'Detail pemberitahuan.';
-                            final bool dibaca = notif['dibaca'] ?? true; 
+                      : Builder(
+                          builder: (context) {
+                            final grouped = _buildGroupedItems(_notifications);
+                            return ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                              itemCount: grouped.length,
+                              itemBuilder: (context, index) {
+                                final item = grouped[index];
 
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  )
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Container(
-                                  color: dibaca ? Colors.white : const Color(0xFFFFFBEF),
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: dibaca ? const Color(0xFFF5F5F5) : const Color(0xFFFFF4E6),
-                                          shape: BoxShape.circle,
+                                // ── Header Grup (Hari Ini / Kemarin / Tanggal) ──
+                                if (item['_isHeader'] == true) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8, bottom: 10),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF422E26),
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            item['_label'] as String,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.3,
+                                            ),
+                                          ),
                                         ),
-                                        child: Icon(
-                                          Icons.work_outline_rounded, 
-                                          size: 20, 
-                                          color: dibaca ? Colors.grey : const Color(0xFFF0B85E)
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Divider(
+                                            color: Colors.grey.shade300,
+                                            thickness: 1,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                // ── Item Notifikasi ──
+                                final notif = item;
+                                final String displayJudul = notif['judul'] ?? 'Pemberitahuan';
+                                final String displayPesan = notif['pesan'] ?? 'Detail pemberitahuan.';
+                                final bool dibaca = notif['dibaca'] ?? true;
+                                final String waktu = _formatTime(notif['dibuat_pada'] ?? notif['created_at']);
+
+                                // Cari indeks asli di _notifications (bukan grouped) untuk _markAsRead
+                                final int realIndex = _notifications.indexOf(
+                                  _notifications.firstWhere(
+                                    (n) =>
+                                        (n['id']?.toString() ?? '') ==
+                                        (notif['id']?.toString() ?? ''),
+                                    orElse: () => notif,
+                                  ),
+                                );
+
+                                return GestureDetector(
+                                  onTap: () => _markAsRead(realIndex),
+                                  child: Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.03),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      )
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Container(
+                                      color: dibaca ? Colors.white : const Color(0xFFFFFBEF),
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: dibaca ? const Color(0xFFF5F5F5) : const Color(0xFFFFF4E6),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.work_outline_rounded,
+                                              size: 20,
+                                              color: dibaca ? Colors.grey : const Color(0xFFF0B85E),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    displayJudul,
-                                                    style: TextStyle(
-                                                      fontWeight: dibaca ? FontWeight.w600 : FontWeight.bold, 
-                                                      fontSize: 14,
-                                                      color: const Color(0xFF422E26)
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        displayJudul,
+                                                        style: TextStyle(
+                                                          fontWeight: dibaca ? FontWeight.w600 : FontWeight.bold,
+                                                          fontSize: 14,
+                                                          color: const Color(0xFF422E26),
+                                                        ),
+                                                      ),
                                                     ),
-                                                  ),
+                                                    // Tampilkan jam (HH:mm) di kanan atas tiap notif
+                                                    Text(
+                                                      waktu,
+                                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                                    ),
+                                                  ],
                                                 ),
+                                                const SizedBox(height: 6),
                                                 Text(
-                                                  _formatTime(notif['dibuat_pada'] ?? notif['created_at']),
-                                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                                  displayPesan,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: dibaca ? Colors.black54 : Colors.black87,
+                                                    height: 1.3,
+                                                  ),
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              displayPesan,
-                                              style: TextStyle(
-                                                fontSize: 13, 
-                                                color: dibaca ? Colors.black54 : Colors.black87,
-                                                height: 1.3
+                                          ),
+                                          if (!dibaca)
+                                            Container(
+                                              margin: const EdgeInsets.only(left: 8, top: 4),
+                                              width: 8,
+                                              height: 8,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFFF0B85E),
+                                                shape: BoxShape.circle,
                                               ),
                                             ),
-                                          ],
-                                        ),
+                                        ],
                                       ),
-                                      if (!dibaca)
-                                        Container(
-                                          margin: const EdgeInsets.only(left: 8, top: 4),
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(color: Color(0xFFF0B85E), shape: BoxShape.circle),
-                                        )
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
