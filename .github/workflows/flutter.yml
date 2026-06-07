@@ -35,6 +35,15 @@ jobs:
           storeFile=release.keystore
           EOF
 
+      - name: 🔍 Debug - Cek key.properties & keystore
+        run: |
+          echo "=== ISI key.properties ==="
+          cat android/key.properties
+          echo "=== CEK FILE KEYSTORE ==="
+          ls -la android/app/release.keystore
+          echo "=== CEK ALIAS KEYSTORE ==="
+          keytool -list -keystore android/app/release.keystore -storepass ${{ secrets.STORE_PASSWORD }}
+
       - name: 📦 Install Dependencies
         run: flutter pub get
 
