@@ -89,7 +89,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
         }
 
         setState(() {
-          _notifications = uniqueList;
+          // Konversi ke modifiable Map agar field 'dibaca' bisa diubah secara lokal
+          _notifications = uniqueList
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
           _errorMessage = null;
           _isLoading = false;
         });
@@ -272,13 +275,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
   List<Map<String, dynamic>> _buildGroupedItems(List<dynamic> notifications) {
     final List<Map<String, dynamic>> grouped = [];
     String? lastLabel;
-    for (final notif in notifications) {
+    for (int i = 0; i < notifications.length; i++) {
+      final notif = notifications[i] as Map<String, dynamic>;
       final label = _groupLabel(notif['dibuat_pada'] ?? notif['created_at']);
       if (label != lastLabel) {
         grouped.add({'_isHeader': true, '_label': label});
         lastLabel = label;
       }
-      grouped.add({'_isHeader': false, ...Map<String, dynamic>.from(notif)});
+      // Simpan _originalIndex agar GestureDetector bisa langsung panggil _markAsRead(i)
+      // tanpa perlu cari ulang via indexOf (yang rawan bug karena Map identity)
+      grouped.add({'_isHeader': false, '_originalIndex': i, ...notif});
     }
     return grouped;
   }
@@ -405,18 +411,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                 final bool dibaca = notif['dibaca'] ?? true;
                                 final String waktu = _formatTime(notif['dibuat_pada'] ?? notif['created_at']);
 
-                                // Cari indeks asli di _notifications (bukan grouped) untuk _markAsRead
-                                final int realIndex = _notifications.indexOf(
-                                  _notifications.firstWhere(
-                                    (n) =>
-                                        (n['id']?.toString() ?? '') ==
-                                        (notif['id']?.toString() ?? ''),
-                                    orElse: () => notif,
-                                  ),
-                                );
+                                // Ambil indeks asli dari _notifications yang sudah disimpan saat build grouped
+                                final int realIndex = item['_originalIndex'] as int? ?? -1;
 
                                 return GestureDetector(
-                                  onTap: () => _markAsRead(realIndex),
+                                  onTap: () {
+                                    if (realIndex >= 0) _markAsRead(realIndex);
+                                  },
                                   child: Container(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   decoration: BoxDecoration(

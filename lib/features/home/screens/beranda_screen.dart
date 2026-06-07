@@ -23,7 +23,6 @@ class BerandaScreen extends StatefulWidget {
 
 class _BerandaScreenState extends State<BerandaScreen> {
   String userName = "Memuat...";
-  String userEducation = "Pendidikan belum diatur";
 
   late Future<Map<String, dynamic>> _berandaData;
 
@@ -79,8 +78,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       userName = prefs.getString("user_name") ?? "User";
-      userEducation =
-          prefs.getString("user_education") ?? "Pendidikan belum diatur";
     });
   }
 
@@ -143,7 +140,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
 
     try {
       // Ekstrak base domain URL dari ApiConfig.beranda secara dinamis
-      // Contoh: 'https://domain.com/api/beranda' diubah menjadi 'https://domain.com'
       final uri = Uri.parse(ApiConfig.beranda);
       final baseUrl =
           "${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}";
@@ -151,7 +147,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
       // Bersihkan slash di awal path database jika ada
       final cleanPath = rawUrl.startsWith('/') ? rawUrl : '/$rawUrl';
 
-      // Menggabungkan domain + folder /storage + path (Contoh: https://domain.com/storage/logo_kafe/...)
+      // Menggabungkan domain + folder /storage + path
       return "$baseUrl/storage$cleanPath";
     } catch (e) {
       return rawUrl;
@@ -228,25 +224,13 @@ class _BerandaScreenState extends State<BerandaScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                userName.toUpperCase(),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: AppColors.textMain,
-                                ),
-                              ),
-                              Text(
-                                userEducation,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textMain.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            userName.toUpperCase(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppColors.textMain,
+                            ),
                           ),
                           Row(
                             children: [
@@ -260,20 +244,16 @@ class _BerandaScreenState extends State<BerandaScreen> {
                                       size: 28,
                                     ),
                                     onPressed: () async {
-                                      // Badge TIDAK di-reset saat masuk — hanya berkurang
-                                      // satu per satu saat user klik masing-masing notif.
                                       await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (context) => NotificationScreen(
                                             onUnreadChanged: (count) {
-                                              // Dipanggil real-time tiap notif diklik di dalam halaman notifikasi
                                               if (mounted) setState(() => _unreadCount = count);
                                             },
                                           ),
                                         ),
                                       );
-                                      // Setelah kembali, sync ulang dari server untuk akurasi
                                       _fetchUnreadCount();
                                     },
                                   ),
@@ -402,7 +382,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                                 final item = lowonganList[index];
                                 final perusahaan = item['perusahaan'] ?? {};
 
-                                // Format url logo perusahaan lewat helper method
                                 final formattedLogo = _formatImageUrl(
                                   perusahaan['logo_perusahaan'],
                                 );
@@ -462,7 +441,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: Column(
                               children: perusahaanList.map((company) {
-                                // Format url logo perusahaan lewat helper method
                                 final formattedLogo = _formatImageUrl(
                                   company['logo_perusahaan'],
                                 );
@@ -515,7 +493,6 @@ class _BerandaScreenState extends State<BerandaScreen> {
         },
         itemCount: _bannerImages.length,
         itemBuilder: (context, index) {
-          // <--- SUDAH DIPERBAIKI (Bukan 'child:' lagi)
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: ClipRRect(
@@ -790,10 +767,10 @@ class _BerandaScreenState extends State<BerandaScreen> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: AppColors.brownDark,
-                              ),
-                            ),
-                          );
-                        },
+                                  ),
+                                ),
+                              );
+                            },
                         errorBuilder: (context, error, stackTrace) =>
                             const Icon(
                               Icons.storefront,

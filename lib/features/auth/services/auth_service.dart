@@ -25,11 +25,13 @@ class AuthService {
         // ── MOBILE (Android / iOS) ────────────────────────────────────
         // Paksa sign out dulu agar dialog pilih akun selalu muncul
         final GoogleSignIn googleSignIn = GoogleSignIn();
+        debugPrint("GOOGLE SIGN IN START");
         await googleSignIn.signOut();
   
         // Mulai alur autentikasi Google
         final GoogleSignInAccount? googleUser =
         await googleSignIn.signIn();
+        debugPrint("GOOGLE USER : ${googleUser?.email}");
 
         if (googleUser == null) {
           return {
@@ -41,6 +43,9 @@ class AuthService {
         // Minta token autentikasi
         final GoogleSignInAuthentication googleAuth =
             await googleUser.authentication;
+
+        debugPrint("ACCESS TOKEN : ${googleAuth.accessToken != null}");
+        debugPrint("ID TOKEN     : ${googleAuth.idToken != null}");
         
         // idToken wajib ada untuk Firebase
         if (googleAuth.idToken == null) {
@@ -59,6 +64,10 @@ class AuthService {
         );
 
         userCredential = await _auth.signInWithCredential(credential);
+        debugPrint("FIREBASE SIGN IN WITH CREDENTIAL");
+        debugPrint(
+          "FIREBASE USER UID : ${userCredential.user?.uid}"
+        );
       }
 
       final User? firebaseUser = userCredential.user;
@@ -137,8 +146,13 @@ class AuthService {
               "Gagal mensinkronisasikan data ke database utama.",
         };
       }
-    } catch (e) {
-      debugPrint("CRITICAL GOOGLE AUTH ERROR: $e");
+    } catch (e, stackTrace) {
+      debugPrint("========== GOOGLE AUTH ERROR ==========");
+      debugPrint("ERROR TYPE : ${e.runtimeType}");
+      debugPrint("ERROR      : $e");
+      debugPrint("STACKTRACE :");
+      debugPrint(stackTrace.toString());
+      debugPrint("======================================");
 
       String pesanError = "Terjadi kesalahan saat login dengan Google.";
       final errStr = e.toString();
