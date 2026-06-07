@@ -22,24 +22,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 🔐 Decode Keystore
-        shell: bash
         run: |
-          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
-
-      - name: 🔍 Check Keystore
-        run: |
-          pwd
-          ls -lah
-          file upload-keystore.jks
-
-      - name: Check Keystore
-        run: |
-          ls -lah
-          ls -lah android
-
-      - name: Check Secret Length
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | wc -c
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
+          
 
       - name: 🔐 Create key.properties
         run: |
@@ -47,10 +32,6 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=../upload-keystore.jks" >> android/key.properties
-
-      - name: Check key.properties
-        run: |
-          cat android/key.properties
 
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
@@ -62,23 +43,6 @@ jobs:
 
       - name: 🧪 Run Tests
         run: flutter test
-        continue-on-error: true
-
-      - name: 🔍 Verify Keystore Exists
-        run: |
-          if [ -f upload-keystore.jks ]; then
-            echo "KEYSTORE FOUND"
-          else
-            echo "KEYSTORE NOT FOUND"
-            exit 1
-          fi
-
-      - name: 🔍 Debug Environment
-        run: |
-          pwd
-          ls -lah
-          ls -lah android
-          cat android/key.properties
 
       - name: 🏗️ Build APK
         run: flutter build apk --release
