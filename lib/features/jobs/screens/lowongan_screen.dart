@@ -139,7 +139,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      "Lowongan Pekerjaan",
+                      "Lowongan",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
