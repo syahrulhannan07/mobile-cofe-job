@@ -471,7 +471,7 @@ class _UbahPasswordScreenState extends State<UbahPasswordScreen> {
       if (response.statusCode == 200 || responseData['status'] == 'success') {
         _showSuccessDialog(
           "Password Berhasil Diubah",
-          "Password Anda berhasil diperbarui di database. Silakan masuk kembali dengan password baru Anda.",
+          "Password Anda berhasil diperbarui. Silakan masuk kembali dengan password baru Anda.",
         );
       } else {
         final message =
