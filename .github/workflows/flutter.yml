@@ -25,6 +25,11 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
 
+      - name: Check Keystore
+        run: |
+          ls -lah
+          ls -lah android
+
       - name: 🔐 Create key.properties
         run: |
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
@@ -43,6 +48,10 @@ jobs:
       - name: 🧪 Run Tests
         run: flutter test
         continue-on-error: true
+
+      - name: Verify keystore exists
+        run: |
+          test -f upload-keystore.jks && echo "FOUND" || echo "NOT FOUND"
 
       - name: 🏗️ Build APK
         run: flutter build apk --release
