@@ -26,6 +26,12 @@ jobs:
         run: |
           printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
 
+      - name: 🔍 Check Keystore
+        run: |
+          pwd
+          ls -lah
+          file upload-keystore.jks
+
       - name: Check Keystore
         run: |
           ls -lah
@@ -42,6 +48,10 @@ jobs:
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=../upload-keystore.jks" >> android/key.properties
 
+      - name: Check key.properties
+        run: |
+          cat android/key.properties
+
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -54,9 +64,21 @@ jobs:
         run: flutter test
         continue-on-error: true
 
-      - name: Verify keystore exists
+      - name: 🔍 Verify Keystore Exists
         run: |
-          test -f upload-keystore.jks && echo "FOUND" || echo "NOT FOUND"
+          if [ -f upload-keystore.jks ]; then
+            echo "KEYSTORE FOUND"
+          else
+            echo "KEYSTORE NOT FOUND"
+            exit 1
+          fi
+
+      - name: 🔍 Debug Environment
+        run: |
+          pwd
+          ls -lah
+          ls -lah android
+          cat android/key.properties
 
       - name: 🏗️ Build APK
         run: flutter build apk --release

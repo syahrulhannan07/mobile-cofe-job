@@ -14,6 +14,7 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    println("KEYSTORE PATH = ${keystoreProperties["storeFile"]}")
 }
 
 android {
@@ -45,7 +46,7 @@ android {
     create("release") {
         keyAlias = keystoreProperties["keyAlias"] as String
         keyPassword = keystoreProperties["keyPassword"] as String
-        storeFile = File(keystoreProperties["storeFile"] as String)
+        storeFile = file(keystoreProperties["storeFile"] as String)
         storePassword = keystoreProperties["storePassword"] as String
         }
     }
