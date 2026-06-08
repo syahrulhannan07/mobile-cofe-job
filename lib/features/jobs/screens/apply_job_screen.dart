@@ -13,6 +13,7 @@ import '../../../core/network/api_config.dart';
 // ignore: unused_import
 import '../../application_status/screens/tracking_timeline_screen.dart';
 import '../../main_layout.dart'; // MainLayout dengan initialIndex
+import '../../auth/widgets/loading_kopi.dart';
 
 class ApplyJobScreen extends StatefulWidget {
   final String jobId;
@@ -1006,7 +1007,7 @@ class _ApplyJobScreenState extends State<ApplyJobScreen>
         backgroundColor: AppColors.scaffoldBackground,
         body: SafeArea(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFFF0B85E)))
+              ? const LoadingKopi(pesan: 'Meyeduh Lamaran...',)
               : Column(
                   children: [
                     _buildHeader(context),

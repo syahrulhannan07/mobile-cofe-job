@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class TrackingTimelineScreen extends StatefulWidget {
   final int lamaranId;
@@ -559,10 +560,8 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.brownDark),
-        ),
+      return const LoadingKopi(
+          pesan: 'Menyeduh Timeline...',
       );
     }
 

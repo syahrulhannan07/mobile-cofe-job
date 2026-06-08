@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/colors.dart';
 import 'detail_lowongan_screen.dart';
 import '../../../core/network/api_config.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class LowonganScreen extends StatefulWidget {
   const LowonganScreen({super.key});
@@ -214,8 +215,8 @@ class _LowonganScreenState extends State<LowonganScreen> {
 
   Widget _buildMainContent() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.brownDark),
+      return const LoadingKopi(
+        pesan: 'Menyeduh Lowongan...',
       );
     }
 

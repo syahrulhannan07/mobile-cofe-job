@@ -301,12 +301,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           label: "Email",
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          hintText: "Masukkan email",
+                          prefixIcon: Icons.email_outlined,
                         ),
                         const SizedBox(height: 16),
                         CustomTextField(
                           label: "Password",
                           isPassword: true,
                           controller: _passwordController,
+                          hintText: "Masukkan password",
+                          prefixIcon: Icons.lock_outline,
                         ),
                         const SizedBox(height: 12),
                         Row(

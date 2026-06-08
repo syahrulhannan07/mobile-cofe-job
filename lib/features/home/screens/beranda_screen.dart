@@ -13,6 +13,7 @@ import 'notification_screen.dart';
 import '../../jobs/screens/detail_lowongan_screen.dart';
 import 'detail_perusahaan_screen.dart';
 import '../../../core/network/api_config.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class BerandaScreen extends StatefulWidget {
   const BerandaScreen({super.key});
@@ -32,6 +33,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
   // Controller untuk Auto Scroll Banner
   final PageController _pageController = PageController(initialPage: 0);
   int _currentPage = 0;
+  Timer? _notifTimer;
   Timer? _timer;
 
   final List<String> _bannerImages = [
@@ -43,15 +45,24 @@ class _BerandaScreenState extends State<BerandaScreen> {
   @override
   void initState() {
     super.initState();
+
     _loadUserData();
     _startAutoScroll();
-    _berandaData = fetchBerandaData(); // Ambil data gabungan dari DB saat init
-    _fetchUnreadCount(); // Ambil jumlah notif belum dibaca untuk badge
+
+    _berandaData = fetchBerandaData();
+
+    _fetchUnreadCount();
+
+    _notifTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _fetchUnreadCount(),
+    );
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _notifTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -98,9 +109,13 @@ class _BerandaScreenState extends State<BerandaScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List<dynamic> list = data['data'] ?? [];
-        final int count = list.where((n) => n['dibaca'] == false).length;
-        if (mounted) setState(() => _unreadCount = count);
+        final int count = int.tryParse(data['meta']?['unread_count']?.toString() ?? '0') ?? 0;
+
+        if (mounted) {
+          setState(() {
+            _unreadCount = count;
+          });
+        }
       }
     } catch (_) {
       // Gagal fetch badge tidak perlu tampilkan error ke UI
@@ -164,8 +179,8 @@ class _BerandaScreenState extends State<BerandaScreen> {
           builder: (context, snapshot) {
             // State Loading saat aplikasi mengambil data dari database
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.brownDark),
+              return const LoadingKopi(
+                pesan: 'Menyeduh Beranda...',
               );
             }
 

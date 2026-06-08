@@ -58,5 +58,6 @@ class ApiConfig {
 
   // Endpoint HTTP Notifikasi
   static const String notificationsEndpoint = '$baseUrl/auth/notifikasi';
+  static const String notificationsCrudEndpoint ='$baseUrl/notifikasi';
   static const String updateFcmToken = '$baseUrl/auth/notifikasi/update-fcm-token';
 }

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -632,7 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: bgCream,
       body: SafeArea(
         child: _isLoading && _namaController.text.isEmpty
-            ? const Center(child: CircularProgressIndicator(color: coffeeBrown))
+            ? const LoadingKopi(pesan: 'Menyeduh profile...',)
             : Column(
                 children: [
                   const SizedBox(height: 20),

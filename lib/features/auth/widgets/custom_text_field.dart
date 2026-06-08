@@ -2,11 +2,13 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
 
-class CustomTextField extends StatelessWidget {
+class CustomTextField extends StatefulWidget {
   final String label;
   final bool isPassword;
   final TextEditingController? controller;
   final TextInputType keyboardType;
+  final String? hintText;
+  final IconData? prefixIcon;
 
   const CustomTextField({
     super.key,
@@ -14,16 +16,27 @@ class CustomTextField extends StatelessWidget {
     this.isPassword = false,
     this.controller,
     this.keyboardType = TextInputType.text,
+    this.hintText,
+    this.prefixIcon,
   });
 
   @override
+  State<CustomTextField> createState() => _CustomTextFieldState();
+}
+
+class _CustomTextFieldState extends State<CustomTextField> {
+  bool _obscure = true;
+
+  @override
   Widget build(BuildContext context) {
+    final bool showToggle = widget.isPassword;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Label di atas input
         Text(
-          label,
+          widget.label,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: AppColors.textMain,
@@ -34,16 +47,45 @@ class CustomTextField extends StatelessWidget {
 
         // Input Field
         TextField(
-          controller: controller,
-          obscureText: isPassword,
-          keyboardType: keyboardType,
+          controller: widget.controller,
+          obscureText: showToggle ? _obscure : false,
+          keyboardType: widget.keyboardType,
           style: const TextStyle(color: AppColors.textMain),
           decoration: InputDecoration(
             isDense: true,
+            hintText: widget.hintText,
+            hintStyle: const TextStyle(
+              color: AppColors.textAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               vertical: 14,
               horizontal: 16,
             ),
+
+            // Prefix icon (opsional)
+            prefixIcon: widget.prefixIcon != null
+                ? Icon(
+                    widget.prefixIcon,
+                    size: 20,
+                    color: AppColors.textAccent,
+                  )
+                : null,
+
+            // Suffix icon toggle password
+            suffixIcon: showToggle
+                ? IconButton(
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 20,
+                      color: AppColors.textAccent,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  )
+                : null,
 
             // Border saat tidak fokus
             enabledBorder: OutlineInputBorder(

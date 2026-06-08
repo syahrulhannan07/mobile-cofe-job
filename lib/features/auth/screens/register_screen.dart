@@ -184,23 +184,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       CustomTextField(
                         label: "Username",
                         controller: _usernameController,
+                        hintText: "Masukkan username",
+                        prefixIcon: Icons.person_outline,
                       ),
                       const SizedBox(height: 16),
                       CustomTextField(
                         label: "Email",
                         controller: _emailController,
+                        hintText: "Masukkan email",
+                        prefixIcon: Icons.email_outlined,
                       ),
                       const SizedBox(height: 16),
                       CustomTextField(
                         label: "Password",
                         isPassword: true,
                         controller: _passwordController,
+                        hintText: "Masukkan password",
+                        prefixIcon: Icons.lock_outline,
                       ),
                       const SizedBox(height: 16),
                       CustomTextField(
                         label: "Konfirmasi Password",
                         isPassword: true,
                         controller: _confirmPasswordController,
+                        hintText: "Masukkan ulang password",
+                        prefixIcon: Icons.lock_outline,
                       ),
                       const SizedBox(height: 12),
 

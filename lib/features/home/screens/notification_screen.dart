@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/network/api_config.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 IMPORT REPLACEMENT: Menggunakan FCM menggantikan Pusher
 import 'dart:async';
+import '../../auth/widgets/loading_kopi.dart';
 
 class NotificationScreen extends StatefulWidget {
   /// Dipanggil setiap kali jumlah notif belum-dibaca berubah (misal: user klik notif).
@@ -161,16 +162,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         }
 
         if (mounted) {
-          setState(() {
-            // Masukkan data baru ke baris paling atas List Notifikasi secara real-time
-            _notifications.insert(0, {
-              'id': message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-              'judul': judulRealtime,
-              'pesan': pesanRealtime,
-              'dibaca': false,
-              'dibuat_pada': DateTime.now().toIso8601String(),
-            });
-          });
+          _fetchNotifications();
 
           // 🔥 POP UP REAL-TIME: Snack Bar Melayang Elegan saat aplikasi aktif
           ScaffoldMessenger.of(context).showSnackBar(
@@ -215,9 +207,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  // Menghitung jumlah notif yang belum dibaca dari list lokal
-  int _countUnread() => _notifications.where((n) => n['dibaca'] == false).length;
-
   // Menandai satu notifikasi sebagai sudah dibaca (lokal + API) lalu notify beranda
   Future<void> _markAsRead(int listIndex) async {
     final notif = _notifications[listIndex];
@@ -228,22 +217,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
       _notifications[listIndex]['dibaca'] = true;
     });
 
-    // 2. Beritahu beranda jumlah unread terbaru lewat callback
-    widget.onUnreadChanged?.call(_countUnread());
+    await _fetchNotifications();
+
+    widget.onUnreadChanged?.call(
+      _notifications.where((e) {
+        return e['dibaca'] == false ||
+              e['dibaca'] == 0;
+      }).length,
+    );
 
     // 3. Sinkronkan ke server (best-effort, tidak blokir UI)
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
       final id = notif['id']?.toString() ?? '';
+      debugPrint('ID notif: $id');
       if (token == null || id.isEmpty) return;
-      await http.post(
-        Uri.parse('${ApiConfig.notificationsEndpoint}/$id/baca'),
+      final response = await http.put(
+        Uri.parse('${ApiConfig.notificationsCrudEndpoint}/$id/baca'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
+      debugPrint('Status: ${response.statusCode}');
+      debugPrint('Body: ${response.body}');
     } catch (e) {
       debugPrint('[Notif] Gagal mark-read ke server: $e');
     }
@@ -304,7 +302,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF422E26))))
+          ? const LoadingKopi(pesan: 'Menyeduh Notifikasi...',)
           : _errorMessage != null
               ? Center(
                   child: Padding(

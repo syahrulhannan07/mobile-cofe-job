@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
 import 'tracking_timeline_screen.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class StatusScreen extends StatefulWidget {
   const StatusScreen({super.key});
@@ -170,11 +171,9 @@ class _StatusScreenState extends State<StatusScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFF0B85E),
-                      ),
-                    )
+                  ? const LoadingKopi(
+                      pesan: 'Menyeduh Status...',
+                      )
                   : _errorMessage != null
                   ? _buildErrorState(_errorMessage!)
                   : dataTerpilih.isEmpty

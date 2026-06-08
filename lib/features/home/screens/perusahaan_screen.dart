@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/colors.dart';
 import 'detail_perusahaan_screen.dart';
 import '../../../core/network/api_config.dart';
+import '../../auth/widgets/loading_kopi.dart';
 
 class PerusahaanScreen extends StatefulWidget {
   const PerusahaanScreen({super.key});
@@ -182,12 +183,8 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                 future: _futurePerusahaan,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF635147),
-                        ),
-                      ),
+                    return const LoadingKopi(
+                      pesan: 'Menyeduh Perusahaan...',
                     );
                   } else if (snapshot.hasError) {
                     return Center(

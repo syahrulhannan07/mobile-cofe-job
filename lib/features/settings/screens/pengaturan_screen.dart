@@ -17,7 +17,6 @@ class PengaturanScreen extends StatefulWidget {
 
 class _PengaturanScreenState extends State<PengaturanScreen> {
   final AuthService _authService = AuthService();
-  bool _isNotificationActive = true;
 
   // --- LOGIKA UTAMA LOGOUT ---
   Future<void> _performLogout() async {
@@ -132,23 +131,6 @@ class _PengaturanScreenState extends State<PengaturanScreen> {
                           ),
                         );
                       },
-                    ),
-
-                    const SizedBox(height: 24),
-                    _buildSectionTitle("Aplikasi"),
-                    _buildSettingsTile(
-                      icon: Icons.notifications_none,
-                      title: "Notifikasi",
-                      subtitle: "Atur pemberitahuan lowongan kerja",
-                      trailing: Switch(
-                        value: _isNotificationActive,
-                        onChanged: (val) {
-                          setState(() {
-                            _isNotificationActive = val;
-                          });
-                        },
-                        activeColor: AppColors.buttonMain,
-                      ),
                     ),
 
                     const SizedBox(height: 40),
