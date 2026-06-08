@@ -126,14 +126,14 @@ class TutorialScreen extends StatelessWidget {
                     Positioned(
                       left: 10,
                       child: IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: coffeeBrown),
+                        icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textMain),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ),
                     const Text(
                       "Tutorial",
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.2, color: coffeeBrown),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.2, color: AppColors.textMain),
                     ),
                   ],
                 ),

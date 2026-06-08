@@ -39,7 +39,7 @@ class BantuanScreen extends StatelessWidget {
                     Positioned(
                       left: 10,
                       child: IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: coffeeBrown),
+                        icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textMain),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ),
@@ -48,7 +48,7 @@ class BantuanScreen extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 20,
-                        color: coffeeBrown,
+                        color: AppColors.textMain,
                       ),
                     ),
                   ],

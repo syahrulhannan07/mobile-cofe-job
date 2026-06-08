@@ -10,7 +10,6 @@ import 'features/main_layout.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // 🔥 1. HANDLER UNTUK NOTIFIKASI SAAT APLIKASI DI BACKGROUND / MATI (TERMINATED)
-// Wajib diletakkan di luar main() dan diberi anotasi @pragma('vm:entry-point')
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Pastikan Firebase diinisialisasi di background process
@@ -37,11 +36,11 @@ void main() async {
       // ✅ 2. PENYESUAIAN BERDASARKAN GOOGLE-SERVICES.JSON TERBARU ANDA (ANDROID)
       await Firebase.initializeApp(
         options: const FirebaseOptions(
-          apiKey: "AIzaSyABpNgm0jaOgnChTixoKU2lyCgQpR7GEQM", // Diambil dari "current_key"
-          appId: "1:234748322219:android:30302aef0796be6c7e72ee", // Diambil dari "mobilesdk_app_id" (Sudah beralih ke Android)
-          messagingSenderId: "234748322219", // Diambil dari "project_number"
-          projectId: "cafejob-6a969", // Diambil dari "project_id"
-          storageBucket: "cafejob-6a969.firebasestorage.app", // Diambil dari "storage_bucket"
+          apiKey: "AIzaSyABpNgm0jaOgnChTixoKU2lyCgQpR7GEQM", 
+          appId: "1:234748322219:android:30302aef0796be6c7e72ee", 
+          messagingSenderId: "234748322219", 
+          projectId: "cafejob-6a969", 
+          storageBucket: "cafejob-6a969.firebasestorage.app", 
         ),
       );
     }
@@ -101,18 +100,33 @@ void main() async {
           return AlertDialog(
             backgroundColor: const Color(0xFFFDF2E2),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-            title: const Row(
+            // ✅ PERBAIKAN DI SINI: Menggunakan Expanded agar Row tidak meluap ke kanan (overflow)
+            title: Row(
               children: [
-                Icon(Icons.coffee_rounded, color: Color(0xFF422E26)),
-                SizedBox(width: 10),
-                Text("Notifikasi Cafe Job", style: TextStyle(color: Color(0xFF422E26), fontWeight: FontWeight.bold)),
+                const Icon(Icons.coffee_rounded, color: Color(0xFF422E26)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Notifikasi Cafe Job", 
+                    style: const TextStyle(
+                      color: Color(0xFF422E26), 
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(message.notification?.title ?? "Judul Kosong", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  message.notification?.title ?? "Judul Kosong", 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
                 const SizedBox(height: 8),
                 Text(message.notification?.body ?? "Isi pesan kosong"),
               ],

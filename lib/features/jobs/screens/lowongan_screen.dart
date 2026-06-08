@@ -286,7 +286,7 @@ class _LowonganScreenState extends State<LowonganScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFFDF7F0),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: AppColors.cardOutline.withValues(alpha: 0.5),

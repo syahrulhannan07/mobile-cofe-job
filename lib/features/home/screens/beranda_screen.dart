@@ -541,7 +541,7 @@ class _BerandaScreenState extends State<BerandaScreen> {
               color: AppColors.brownLight,
               borderRadius: BorderRadius.circular(15),
             ),
-            child: Icon(icon, size: 35, color: AppColors.brownDark),
+            child: Icon(icon, size: 35, color: AppColors.textMain),
           ),
           const SizedBox(height: 8),
           Text(

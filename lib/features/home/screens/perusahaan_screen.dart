@@ -128,7 +128,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                       child: IconButton(
                         icon: const Icon(
                           Icons.arrow_back_rounded,
-                          color: Color(0xFF635147),
+                          color: AppColors.textMain,
                         ),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -138,7 +138,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 20,
-                        color: Color(0xFF635147),
+                        color: AppColors.textMain,
                       ),
                     ),
                   ],

@@ -1,7 +1,7 @@
 class ApiConfig {
   // Base URL Utama (Cukup ganti di sini jika pindah server/lokal)
   static const String baseUrl =
-      'https://cofe-job.cicd.my.id/api/v1'; // Contoh IP
+      'http://192.168.1.7:8000/api/v1'; // Contoh IP
   // static const String baseUrl = 'http://localhost:8000/api'; // Contoh Chrome Web
 
   // --- DAFTAR ROUTE / ENDPOINT API ---
@@ -20,7 +20,7 @@ class ApiConfig {
 
   // Fitur Perusahaan
   static const String perusahaan = '$baseUrl/perusahaan?per_page=100';
-  static String detailPerusahaan(int id) => '$baseUrl/perusahaan/$id';
+  static String detailPerusahaan(int idPerusahaan) => '$baseUrl/perusahaan/$idPerusahaan';
 
   // Fitur Lamaran
   static const String mulaiLamaran = '$baseUrl/lamaran/mulai';

@@ -214,24 +214,32 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(
-                            Icons.calendar_month_rounded,
-                            color: AppColors.brownDark,
-                            size: 22,
-                          ),
-                          SizedBox(width: 10),
-                          Text(
-                            "Detail Jadwal Wawancara",
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D1B18),
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              color: AppColors.brownDark,
+                              size: 22,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                "Detail Jadwal",
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2D1B18),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
                         child: const Icon(
@@ -263,52 +271,58 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 4, bottom: 6),
-                                  child: Text(
-                                    "Status",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0x993D2722),
-                                      fontWeight: FontWeight.w600,
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 4, bottom: 6),
+                                    child: Text(
+                                      "Status",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0x993D2722),
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFBB041),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today_rounded,
-                                        size: 13,
-                                        color: Color(0xFF2D1B18),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        _wawancara?['status_jadwal'] ??
-                                            _wawancara?['status'] ??
-                                            'Terjadwal',
-                                        style: const TextStyle(
-                                          color: Color(0xFF3D2722),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFBB041),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today_rounded,
+                                          size: 13,
+                                          color: Color(0xFF2D1B18),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            _wawancara?['status_jadwal'] ??
+                                                _wawancara?['status'] ??
+                                                'Terjadwal',
+                                            style: const TextStyle(
+                                              color: Color(0xFF3D2722),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -604,7 +618,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Tracking Timeline",
+          "Detail Status",
           style: TextStyle(
             color: AppColors.brownDark,
             fontWeight: FontWeight.bold,
@@ -849,18 +863,22 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
           ),
           const SizedBox(width: 10),
           // Status Pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFBB041),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              _data?['status_saat_ini'] ?? _data?['status'] ?? '-',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Color(0xFF3D2722),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBB041),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _data?['status_saat_ini'] ?? _data?['status'] ?? '-',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Color(0xFF3D2722),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ),
