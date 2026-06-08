@@ -11,6 +11,8 @@ class ApiConfig {
   static const String registerPelamar = '$baseUrl/auth/daftar-pelamar';
   static const String logout = '$baseUrl/logout';
   static const String googleAuth = "$baseUrl/auth/google-auth";
+  static const String forgotPassword = '$baseUrl/auth/forgot-password';
+  static const String resetPassword  = '$baseUrl/auth/reset-password';
 
   // Fitur Beranda (Lowongan dan Perusahaan Terbaru)
   static const String beranda = '$baseUrl/beranda';

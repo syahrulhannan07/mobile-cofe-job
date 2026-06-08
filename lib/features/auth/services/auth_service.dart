@@ -290,6 +290,116 @@ class AuthService {
     }
   }
 
+  // ================= FORGOT PASSWORD =================
+  /// Langkah 1: Kirim email berisi link reset password.
+  /// Memanggil endpoint yang sama dengan website:
+  ///   POST /api/forgot-password
+  ///   Body: { "email": "..." }
+  ///
+  /// Tambahkan di ApiConfig:
+  ///   static const String forgotPassword = '$baseUrl/forgot-password';
+  Future<Map<String, dynamic>> forgotPassword({
+    required String email,
+  }) async {
+    try {
+      debugPrint("FORGOT PASSWORD REQUEST → email: $email");
+
+      final response = await http.post(
+        Uri.parse(ApiConfig.forgotPassword),
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"email": email}),
+      );
+
+      debugPrint("FORGOT PASSWORD Status : ${response.statusCode}");
+      debugPrint("FORGOT PASSWORD Body   : ${response.body}");
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "status": true,
+          "message": data["message"] ?? "Link reset password telah dikirim ke email Anda.",
+        };
+      } else {
+        return {
+          "status": false,
+          "message": data["message"] ?? "Email tidak terdaftar atau terjadi kesalahan.",
+        };
+      }
+    } catch (e) {
+      debugPrint("FORGOT PASSWORD ERROR: $e");
+      return {
+        "status": false,
+        "message": "Gagal terhubung ke server. Periksa koneksi internet Anda.",
+      };
+    }
+  }
+
+  // ================= RESET PASSWORD =================
+  /// Langkah 2: Simpan password baru menggunakan token dari email.
+  /// Memanggil endpoint yang sama dengan website:
+  ///   POST /api/reset-password
+  ///   Body: {
+  ///     "token": "...",
+  ///     "email": "...",
+  ///     "password": "...",
+  ///     "password_confirmation": "..."
+  ///   }
+  ///
+  /// Tambahkan di ApiConfig:
+  ///   static const String resetPassword = '$baseUrl/reset-password';
+  Future<Map<String, dynamic>> resetPassword({
+    required String token,
+    required String email,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    try {
+      debugPrint("RESET PASSWORD REQUEST → email: $email");
+
+      final response = await http.post(
+        Uri.parse(ApiConfig.resetPassword),
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "token": token,
+          "email": email,
+          "password": password,
+          "password_confirmation": passwordConfirmation,
+        }),
+      );
+
+      debugPrint("RESET PASSWORD Status : ${response.statusCode}");
+      debugPrint("RESET PASSWORD Body   : ${response.body}");
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "status": true,
+          "message": data["message"] ?? "Kata sandi berhasil diubah.",
+        };
+      } else {
+        return {
+          "status": false,
+          // Pesan dari backend — biasanya "Token tidak valid" atau "Token kadaluarsa"
+          "message": data["message"] ?? "Gagal mengatur ulang kata sandi. Link mungkin sudah kadaluarsa.",
+        };
+      }
+    } catch (e) {
+      debugPrint("RESET PASSWORD ERROR: $e");
+      return {
+        "status": false,
+        "message": "Gagal terhubung ke server. Periksa koneksi internet Anda.",
+      };
+    }
+  }
+
   // ================= LOGOUT =================
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
