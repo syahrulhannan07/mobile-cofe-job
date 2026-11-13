@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/network/api_config.dart';
 import '../../auth/widgets/loading_kopi.dart';
+import '../../face_verification/models/face_verification_outcome.dart';
+import '../../face_verification/screens/face_verification_screen.dart';
 
 class TrackingTimelineScreen extends StatefulWidget {
   final int lamaranId;
@@ -20,8 +22,9 @@ class TrackingTimelineScreen extends StatefulWidget {
 
 class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
   bool _isLoading = true;
-  bool _submitting = false; // [UPDATE LOGIC] state tombol konfirmasi
+  bool _submitting = false; // state proses presensi
   String? _errorMessage;
+  String? _presensiError;
 
   Map<String, dynamic>? _data;
   Map<String, dynamic>? _wawancara;
@@ -133,63 +136,352 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
     }
   }
 
-  // [UPDATE LOGIC] Handler konfirmasi wawancara — sesuai website React
-  Future<void> _handleKonfirmasi(BuildContext ctx) async {
+  // Handler presensi wajah wawancara — sesuai website React
+  Future<void> _mulaiPresensi(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) async {
     if (_submitting) return;
-    setState(() => _submitting = true);
+
+    setState(() {
+      _submitting = true;
+      _presensiError = null;
+    });
+    _refreshPresensiDialog(dialogContext, setDialogState);
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("token");
-      final url = Uri.parse(
-        '${ApiConfig.baseUrl}/pelamar/lamaran/${widget.lamaranId}/konfirmasi-wawancara',
-      );
-      final response = await http.post(
-        url,
+
+      final response = await http.get(
+        Uri.parse(ApiConfig.detailWawancara(widget.lamaranId)),
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
-      final json = jsonDecode(response.body);
-      if (!mounted) return;
-      if (json['status'] == 'success') {
-        Navigator.pop(ctx);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Terima kasih! Konfirmasi Anda telah terkirim ke perusahaan.'),
-            backgroundColor: Color(0xFF3D2722),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gagal mengirim konfirmasi. Silakan coba lagi nanti.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+
+      Map<String, dynamic> body = {};
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) {
+          body = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+
+      if (response.statusCode != 200 ||
+          body['status'] != 'success' ||
+          body['data'] is! Map) {
+        if (!mounted) return;
+        setState(() {
+          _presensiError =
+              body['message']?.toString() ??
+              'Jadwal wawancara belum dapat dimuat. Silakan coba lagi.';
+        });
+        _refreshPresensiDialog(dialogContext, setDialogState);
+        return;
       }
-    } catch (e) {
-      debugPrint("Error konfirmasi: $e");
+
+      final jadwal = Map<String, dynamic>.from(body['data'] as Map);
       if (!mounted) return;
+
+      setState(() {
+        _wawancara = {
+          ...?_wawancara,
+          ...jadwal,
+          'tanggal': jadwal['tanggal_wawancara'] ?? _wawancara?['tanggal'],
+          'status_jadwal': jadwal['status'] ?? _wawancara?['status_jadwal'],
+        };
+      });
+      _refreshPresensiDialog(dialogContext, setDialogState);
+
+      if (jadwal['presensi'] is Map) {
+        if (dialogContext.mounted) Navigator.pop(dialogContext);
+        _fetchDetailLamaran();
+        return;
+      }
+
+      if (jadwal['can_presensi'] != true) {
+        if (!mounted) return;
+        setState(() {
+          _presensiError =
+              jadwal['alasan_presensi']?.toString() ??
+              'Presensi belum tersedia untuk jadwal ini.';
+        });
+        _refreshPresensiDialog(dialogContext, setDialogState);
+        return;
+      }
+
+      final rawIdWawancara = jadwal['id_wawancara'];
+      final idWawancara = rawIdWawancara is num
+          ? rawIdWawancara.toInt()
+          : int.tryParse(rawIdWawancara?.toString() ?? '');
+
+      if (idWawancara == null) {
+        if (!mounted) return;
+        setState(() {
+          _presensiError =
+              'Jadwal wawancara tidak valid. Muat ulang detail jadwal terlebih dahulu.';
+        });
+        _refreshPresensiDialog(dialogContext, setDialogState);
+        return;
+      }
+
+      final profilResponse = await http.get(
+        Uri.parse(ApiConfig.profile),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      String? fotoProfil;
+      if (profilResponse.statusCode == 200) {
+        final profilBody = jsonDecode(profilResponse.body);
+        final profil = profilBody['data'] ?? profilBody;
+        if (profil is Map) {
+          fotoProfil = profil['foto_profil']?.toString();
+        }
+      }
+
+      if (fotoProfil == null || fotoProfil.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _presensiError =
+              'Lengkapi foto profil terlebih dahulu sebelum melakukan presensi.';
+        });
+        _refreshPresensiDialog(dialogContext, setDialogState);
+        return;
+      }
+
+      if (!mounted) return;
+      final outcome = await Navigator.of(context, rootNavigator: true)
+          .push<FaceVerificationOutcome>(
+            MaterialPageRoute(
+              builder: (_) => FaceVerificationScreen(
+                idLamaran: widget.lamaranId,
+                idWawancara: idWawancara,
+                profilePhoto: fotoProfil,
+              ),
+            ),
+          );
+
+      if (!mounted || outcome == null || !outcome.success) return;
+
+      setState(() {
+        _wawancara = {
+          ...?_wawancara,
+          'presensi': outcome.presensi,
+          'status_jadwal': outcome.statusJadwal ?? 'Selesai',
+          'can_presensi': false,
+          'alasan_presensi': 'Presensi wawancara sudah tercatat.',
+        };
+        _presensiError = null;
+      });
+      _refreshPresensiDialog(dialogContext, setDialogState);
+
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      _fetchDetailLamaran();
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Gagal mengirim konfirmasi. Silakan coba lagi nanti.'),
-          backgroundColor: Colors.red,
+          content: Text('Presensi berhasil. Kehadiran Anda telah dicatat.'),
+          backgroundColor: Color(0xFF16A34A),
         ),
       );
+    } catch (e) {
+      debugPrint("Error presensi: $e");
+      if (!mounted) return;
+      setState(() {
+        _presensiError =
+            'Gagal memproses presensi. Periksa koneksi internet lalu coba lagi.';
+      });
+      _refreshPresensiDialog(dialogContext, setDialogState);
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+        _refreshPresensiDialog(dialogContext, setDialogState);
+      }
     }
+  }
+
+  void _refreshPresensiDialog(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) {
+    if (dialogContext.mounted) setDialogState(() {});
+  }
+
+  String _formatPresensiTime(dynamic raw) {
+    if (raw == null) return '';
+    try {
+      final time = DateTime.parse(raw.toString()).toLocal();
+      return DateFormat("dd MMMM yyyy - HH:mm", "id_ID").format(time);
+    } catch (_) {
+      return raw.toString();
+    }
+  }
+
+  Widget _buildPresensiFooter(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) {
+    final presensiRaw = _wawancara?['presensi'];
+    if (presensiRaw is Map) {
+      final presensi = Map<String, dynamic>.from(presensiRaw);
+      final waktu = _formatPresensiTime(presensi['waktu_presensi']);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECFDF3),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Hadir — Identitas terverifikasi',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF166534),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Presensi Anda sudah tercatat. Perusahaan telah diberi tahu bahwa Anda hadir dan siap diwawancarai.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF166534),
+                    height: 1.5,
+                  ),
+                ),
+                if (waktu.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Waktu presensi: $waktu',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF166534),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'Tutup',
+                style: TextStyle(
+                  color: Color(0xFF3D2722),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final canPresensi = _wawancara?['can_presensi'] == true;
+    final statusJadwal = (_wawancara?['status_jadwal'] ?? _wawancara?['status'])
+        ?.toString();
+    final statusLamaran = (_data?['status_saat_ini'] ?? _data?['status'])
+        ?.toString();
+    final isScheduleActive =
+        statusJadwal == 'Terjadwal' && statusLamaran == 'Wawancara';
+    final alasan = _wawancara?['alasan_presensi']?.toString();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          canPresensi
+              ? 'Sudah hadir dan siap diwawancarai? Lakukan presensi wajah. Kehadiran hanya dicatat setelah verifikasi berhasil.'
+              : (alasan?.isNotEmpty == true
+                    ? alasan!
+                    : 'Presensi wajah tersedia pada tanggal wawancara untuk jadwal yang masih aktif.'),
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xCC3D2722),
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _submitting || !isScheduleActive
+                ? null
+                : () => _mulaiPresensi(dialogContext, setDialogState),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB041),
+              disabledBackgroundColor: const Color(
+                0xFFFBB041,
+              ).withValues(alpha: 0.45),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              elevation: 0,
+            ),
+            child: _submitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF3D2722),
+                    ),
+                  )
+                : Text(
+                    canPresensi
+                        ? 'Presensi Wajah'
+                        : 'Cek Ketersediaan Presensi',
+                    style: const TextStyle(
+                      color: Color(0xFF3D2722),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+          ),
+        ),
+        if (_presensiError != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _presensiError!,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFFB91C1C),
+              height: 1.5,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   void _showJadwalPopup(BuildContext context) {
     if (_wawancara == null) return;
 
+    setState(() => _presensiError = null);
+
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext dialogContext, StateSetter setDialogState) {
+            return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24.0),
           ),
@@ -461,7 +753,7 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                   ),
                 ),
 
-                // Footer (sesuai website: bg lebih gelap + tombol kanan)
+                // Footer (presensi wajah / status kehadiran)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
@@ -470,45 +762,13 @@ class _TrackingTimelineScreenState extends State<TrackingTimelineScreen> {
                   decoration: const BoxDecoration(
                     color: Color(0xFFF0EDE9),
                   ),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      onPressed: _submitting ? null : () => _handleKonfirmasi(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFBB041),
-                        disabledBackgroundColor: const Color(0xFFFBB041).withValues(alpha: 0.5),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFF3D2722),
-                              ),
-                            )
-                          : const Text(
-                              "Konfirmasi",
-                              style: TextStyle(
-                                color: Color(0xFF3D2722),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                    ),
-                  ),
+                  child: _buildPresensiFooter(dialogContext, setDialogState),
                 ),
               ],
             ),
           ),
+            );
+          },
         );
       },
     );

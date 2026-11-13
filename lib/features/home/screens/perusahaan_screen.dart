@@ -18,12 +18,24 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
   late Future<List<Map<String, dynamic>>> _futurePerusahaan;
   List<Map<String, dynamic>> _allPerusahaan = [];
   List<Map<String, dynamic>> _filteredPerusahaan = [];
+  String? _selectedLokasi;
+  bool _lokasiMenuOpen = false;
+  OverlayEntry? _lokasiOverlay;
+  final LayerLink _lokasiLink = LayerLink();
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _futurePerusahaan = fetchPerusahaan();
+  }
+
+  @override
+  void dispose() {
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = null;
+    _searchController.dispose();
+    super.dispose();
   }
 
   // ==================== FUNGSI FETCH API (FORCE ALL DATA) ====================
@@ -56,9 +68,15 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
         List<Map<String, dynamic>> perusahaanList =
             List<Map<String, dynamic>>.from(dataList);
 
+        final lokasiOptions = _locationsOf(perusahaanList);
+        if (_selectedLokasi != null &&
+            !lokasiOptions.contains(_selectedLokasi)) {
+          _selectedLokasi = null;
+        }
+
         setState(() {
           _allPerusahaan = perusahaanList;
-          _filteredPerusahaan = perusahaanList;
+          _filteredPerusahaan = _applyFilters(perusahaanList);
         });
 
         return perusahaanList;
@@ -72,26 +90,47 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
     }
   }
 
-  // ==================== FUNGSI FITUR SEARCH ====================
-  void _filterPerusahaan(String query) {
+  List<String> _locationsOf(List<Map<String, dynamic>> items) {
+    final set = <String>{};
+    for (final item in items) {
+      final lokasi = (item['alamat_perusahaan'] ?? '').toString().trim();
+      if (lokasi.isNotEmpty) set.add(lokasi);
+    }
+    final result = set.toList()..sort();
+    return result;
+  }
+
+  List<Map<String, dynamic>> _applyFilters([List<Map<String, dynamic>>? source]) {
+    final items = source ?? _allPerusahaan;
+    final query = _searchController.text.trim().toLowerCase();
+
+    return items.where((perusahaan) {
+      final nama = (perusahaan['nama_perusahaan'] ?? '')
+          .toString()
+          .toLowerCase();
+      final alamat = (perusahaan['alamat_perusahaan'] ?? '')
+          .toString()
+          .toLowerCase();
+      final matchesSearch =
+          query.isEmpty || nama.contains(query) || alamat.contains(query);
+      final matchesLokasi =
+          _selectedLokasi == null ||
+          (perusahaan['alamat_perusahaan'] ?? '').toString().trim() ==
+              _selectedLokasi;
+      return matchesSearch && matchesLokasi;
+    }).toList();
+  }
+
+  void _filterSearch(String query) {
     setState(() {
-      if (query.isEmpty) {
-        _filteredPerusahaan = _allPerusahaan;
-      } else {
-        _filteredPerusahaan = _allPerusahaan
-            .where(
-              (perusahaan) =>
-                  (perusahaan['nama_perusahaan'] ?? '')
-                      .toString()
-                      .toLowerCase()
-                      .contains(query.toLowerCase()) ||
-                  (perusahaan['alamat_perusahaan'] ?? '')
-                      .toString()
-                      .toLowerCase()
-                      .contains(query.toLowerCase()),
-            )
-            .toList();
-      }
+      _filteredPerusahaan = _applyFilters();
+    });
+  }
+
+  void _selectLokasi(String? lokasi) {
+    setState(() {
+      _selectedLokasi = lokasi;
+      _filteredPerusahaan = _applyFilters();
     });
   }
 
@@ -153,7 +192,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
                 controller: _searchController,
-                onChanged: _filterPerusahaan,
+                onChanged: _filterSearch,
                 decoration: InputDecoration(
                   hintText: "Cari Perusahaan...",
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -162,7 +201,7 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
                           icon: const Icon(Icons.clear, color: Colors.grey),
                           onPressed: () {
                             _searchController.clear();
-                            _filterPerusahaan('');
+                            _filterSearch('');
                           },
                         )
                       : null,
@@ -176,6 +215,14 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
               ),
             ),
             const SizedBox(height: 20),
+
+            if (_locationsOf(_allPerusahaan).isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildLokasiFilter(),
+              ),
+              const SizedBox(height: 20),
+            ],
 
             // 3. Daftar Perusahaan Menggunakan FutureBuilder
             Expanded(
@@ -257,6 +304,182 @@ class _PerusahaanScreenState extends State<PerusahaanScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLokasiFilter() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return CompositedTransformTarget(
+          link: _lokasiLink,
+          child: SizedBox(
+            height: 44,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => _toggleLokasiMenu(constraints.maxWidth),
+                child: Ink(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3EDE6),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF818080)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 18,
+                        color: Color(0xFF4B2E2B),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _selectedLokasi ?? 'Lokasi',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFC69C6D),
+                          ),
+                        ),
+                      ),
+                      AnimatedRotation(
+                        turns: _lokasiMenuOpen ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 22,
+                          color: Color(0xFF4B2E2B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _toggleLokasiMenu(double width) {
+    if (_lokasiMenuOpen) {
+      _closeLokasiMenu();
+    } else {
+      _openLokasiMenu(width);
+    }
+  }
+
+  void _openLokasiMenu(double width) {
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = OverlayEntry(
+      builder: (context) => _buildLokasiOverlay(width),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_lokasiOverlay!);
+    setState(() => _lokasiMenuOpen = true);
+  }
+
+  void _closeLokasiMenu() {
+    if (_lokasiOverlay == null && !_lokasiMenuOpen) return;
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = null;
+    if (!mounted) {
+      _lokasiMenuOpen = false;
+      return;
+    }
+    setState(() => _lokasiMenuOpen = false);
+  }
+
+  Widget _buildLokasiOverlay(double width) {
+    final options = _locationsOf(_allPerusahaan);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _closeLokasiMenu,
+            child: const SizedBox.expand(),
+          ),
+        ),
+        CompositedTransformFollower(
+          link: _lokasiLink,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: const Offset(0, 6),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: width,
+              constraints: const BoxConstraints(maxHeight: 288),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3EDE6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF818080)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Material(
+                  color: const Color(0xFFF3EDE6),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length + 1,
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: const Color(0xFF818080).withValues(alpha: 0.2),
+                    ),
+                    itemBuilder: (context, index) {
+                      final String? value = index == 0
+                          ? null
+                          : options[index - 1];
+                      final String label =
+                          index == 0 ? 'Semua Lokasi' : options[index - 1];
+
+                      return InkWell(
+                        onTap: () {
+                          _selectLokasi(value);
+                          _closeLokasiMenu();
+                        },
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF4B2E2B),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -348,7 +348,7 @@ class _DetailPerusahaanScreenState extends State<DetailPerusahaanScreen>
                           ? Image.network(
                               _logoUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
+                              errorBuilder: (_, _, _) => const Icon(
                                 Icons.storefront_rounded,
                                 color: _gradStart,
                                 size: 48,

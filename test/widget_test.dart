@@ -196,26 +196,26 @@ void main() {
   // ─────────────────────────────────────────
   group('Unit Tests - Logika Bisnis', () {
     test('Token FCM valid jika tidak null dan tidak kosong', () {
-      String? token = "abc123tokenFCMpalsu";
-      expect(token != null && token.isNotEmpty, isTrue);
+      const token = "abc123tokenFCMpalsu";
+      expect(token.isNotEmpty, isTrue);
     });
 
-    test('Token FCM valid jika tidak null dan tidak kosong', () {
-      dynamic token = "abc123tokenFCMpalsu";
-      expect(token != null && (token as String).isNotEmpty, isTrue);
+    test('Token FCM invalid jika kosong', () {
+      const token = "";
+      expect(token.isEmpty, isTrue);
     });
 
     test('Token FCM invalid jika null', () {
-      dynamic token = null;
-      expect(token, isNull); // gunakan matcher isNull
+      const String? token = null;
+      expect(token, isNull);
     });
 
     test('Warna tema Cafe Job sesuai brand', () {
-      const Color primaryColor = Color(0xFF422E26);
-      const Color backgroundColor = Color(0xFFFDF2E2);
+      const primaryColor = Color(0xFF422E26);
+      const backgroundColor = Color(0xFFFDF2E2);
 
-      expect(primaryColor.value, equals(0xFF422E26));
-      expect(backgroundColor.value, equals(0xFFFDF2E2));
+      expect(primaryColor.toARGB32(), equals(0xFF422E26));
+      expect(backgroundColor.toARGB32(), equals(0xFFFDF2E2));
     });
   });
 }

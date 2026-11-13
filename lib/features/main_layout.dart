@@ -1,6 +1,7 @@
 // lib/features/home/main_layout.dart
 import 'package:flutter/material.dart';
 import '../core/constants/colors.dart';
+import 'chatbot/widgets/floating_chatbot.dart';
 import 'home/screens/beranda_screen.dart';
 import 'jobs/screens/lowongan_screen.dart';
 import 'application_status/screens/status_screen.dart';
@@ -35,32 +36,39 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
-      body: _screens[_currentIndex], // Menampilkan halaman sesuai index
-      
-      // --- KUSTOM BOTTOM NAVBAR ---
-      // Kita bungkus SafeArea agar tidak hancur di HP yang ada notch bawah
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          height: 70, // Sesuaikan tinggi navbar
-          margin: const EdgeInsets.all(16), // Jarak navbar dari pinggir layar
-          decoration: BoxDecoration(
-            color: AppColors.brownLight, // Warna dasar navbar (cokelat muda)
-            borderRadius: BorderRadius.circular(15), // Sudut melengkung
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              // Kita buat fungsi reusable untuk item navbar
-              _buildNavItem(index: 0, icon: Icons.home_filled),
-              _buildNavItem(index: 1, icon: Icons.business_center_rounded),
-              _buildNavItem(index: 2, icon: Icons.person_search_rounded), // Icon status mendekati
-              _buildNavItem(index: 3, icon: Icons.settings_rounded),
-            ],
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppColors.scaffoldBackground,
+          body: _screens[_currentIndex],
+          bottomNavigationBar: SafeArea(
+            child: Container(
+              height: 70,
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.brownLight,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavItem(index: 0, icon: Icons.home_filled),
+                  _buildNavItem(
+                    index: 1,
+                    icon: Icons.business_center_rounded,
+                  ),
+                  _buildNavItem(
+                    index: 2,
+                    icon: Icons.person_search_rounded,
+                  ),
+                  _buildNavItem(index: 3, icon: Icons.settings_rounded),
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        const FloatingChatbot(),
+      ],
     );
   }
 

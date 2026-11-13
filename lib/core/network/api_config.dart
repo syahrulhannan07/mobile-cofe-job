@@ -32,6 +32,8 @@ class ApiConfig {
       '$baseUrl/lamaran/$idLamaran/dokumen';
   static String simpanJawaban(int idLamaran) =>
       '$baseUrl/lamaran/$idLamaran/jawaban';
+  static String verifikasiWajah(int idLamaran) =>
+      '$baseUrl/lamaran/$idLamaran/verifikasi-wajah';
   static String kirimLamaran(int idLamaran) =>
       '$baseUrl/lamaran/$idLamaran/kirim';
   static String detailLowongan(int id) =>
@@ -55,6 +57,13 @@ class ApiConfig {
   // Fitur Status Lamaran
   static const String riwayatLamaran = "$baseUrl/pelamar/lamaran";
   static String detailLamaran(int id) => "$baseUrl/pelamar/lamaran/$id";
+  static String detailWawancara(int idLamaran) =>
+      "$baseUrl/pelamar/lamaran/$idLamaran/wawancara";
+  static String konfirmasiWawancara(int idLamaran) =>
+      "$baseUrl/pelamar/lamaran/$idLamaran/konfirmasi-wawancara";
+
+  // Fitur Chatbot AI
+  static const String chatbotAsk = '$baseUrl/chatbot/ask';
 
   // Endpoint HTTP Notifikasi
   static const String notificationsEndpoint = '$baseUrl/auth/notifikasi';

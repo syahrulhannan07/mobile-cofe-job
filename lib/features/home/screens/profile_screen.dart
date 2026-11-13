@@ -35,9 +35,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _tentangSayaController = TextEditingController();
 
   // Menyimpan data dinamis beserta ID dari database
-  List<Map<String, dynamic>> _pendidikanForms = [];
-  List<Map<String, dynamic>> _skillForms = [];
-  List<Map<String, dynamic>> _pengalamanForms = [];
+  final List<Map<String, dynamic>> _pendidikanForms = [];
+  final List<Map<String, dynamic>> _skillForms = [];
+  final List<Map<String, dynamic>> _pengalamanForms = [];
 
   String? _currentPhotoUrl;
 

@@ -47,5 +47,7 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSCameraUsageDescription</key>
+		<string>Aplikasi membutuhkan akses kamera untuk verifikasi wajah saat melamar dan presensi wawancara.</string>
 	</dict>
 </plist>

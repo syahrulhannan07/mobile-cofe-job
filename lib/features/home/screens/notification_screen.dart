@@ -5,7 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/network/api_config.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 IMPORT REPLACEMENT: Menggunakan FCM menggantikan Pusher
 import 'dart:async';
+import '../../application_status/screens/tracking_timeline_screen.dart';
 import '../../auth/widgets/loading_kopi.dart';
+import '../../jobs/screens/detail_lowongan_screen.dart';
+import 'profile_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   /// Dipanggil setiap kali jumlah notif belum-dibaca berubah (misal: user klik notif).
@@ -247,6 +250,106 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  void _handleNotificationTap(int listIndex) {
+    if (listIndex < 0 || listIndex >= _notifications.length) return;
+
+    final notif = _notifications[listIndex];
+    final url = (notif['url'] ?? '').toString().trim();
+
+    _markAsRead(listIndex);
+
+    if (url.isNotEmpty) {
+      _routeNotification(url);
+    }
+  }
+
+  Future<void> _routeNotification(String rawUrl) async {
+    final Uri uri;
+    try {
+      uri = Uri.parse(rawUrl);
+    } catch (_) {
+      return;
+    }
+
+    final segments =
+        uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+    if (segments.isEmpty) return;
+
+    if (segments.first == 'status-lamaran' && segments.length > 1) {
+      final id = int.tryParse(segments[1]);
+      if (id == null) return;
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TrackingTimelineScreen(lamaranId: id),
+        ),
+      );
+      return;
+    }
+
+    if (segments.first == 'lowongan' && segments.length > 1) {
+      final id = int.tryParse(segments[1]);
+      if (id == null) return;
+      await _openLowongan(id);
+      return;
+    }
+
+    if (segments.first == 'profil') {
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+      );
+    }
+  }
+
+  Future<void> _openLowongan(int id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      final response = await http.get(
+        Uri.parse(ApiConfig.detailLowongan(id)),
+        headers: {
+          'Accept': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        final data = decoded['data'] ?? decoded;
+
+        if (data is Map) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetailLowonganScreen(lowongan: data),
+            ),
+          );
+          return;
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lowongan tidak tersedia atau sudah ditutup.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal membuka detail lowongan. Periksa koneksi Anda.'),
+        ),
+      );
+    }
+  }
+
   // Menentukan label grup berdasarkan tanggal notifikasi
   String _groupLabel(String? dateStr) {
     if (dateStr == null) return "Sebelumnya";
@@ -414,7 +517,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
                                 return GestureDetector(
                                   onTap: () {
-                                    if (realIndex >= 0) _markAsRead(realIndex);
+                                    _handleNotificationTap(realIndex);
                                   },
                                   child: Container(
                                   margin: const EdgeInsets.only(bottom: 10),
@@ -423,7 +526,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.03),
+                                        color: Colors.black.withValues(alpha: 0.03),
                                         blurRadius: 10,
                                         offset: const Offset(0, 4),
                                       )

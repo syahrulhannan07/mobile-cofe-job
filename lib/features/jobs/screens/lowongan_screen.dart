@@ -19,7 +19,11 @@ class _LowonganScreenState extends State<LowonganScreen> {
   List<dynamic> _filteredLowongan = []; // Data setelah difilter search bar
   bool _isLoading = true;
   String _errorMessage = "";
+  String? _selectedLokasi;
+  bool _lokasiMenuOpen = false;
+  OverlayEntry? _lokasiOverlay;
 
+  final LayerLink _lokasiLink = LayerLink();
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -30,6 +34,8 @@ class _LowonganScreenState extends State<LowonganScreen> {
 
   @override
   void dispose() {
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = null;
     _searchController.dispose();
     super.dispose();
   }
@@ -62,9 +68,15 @@ class _LowonganScreenState extends State<LowonganScreen> {
           lowonganData = rawData;
         }
 
+        final lokasiOptions = _locationsOf(lowonganData);
+        if (_selectedLokasi != null &&
+            !lokasiOptions.contains(_selectedLokasi)) {
+          _selectedLokasi = null;
+        }
+
         setState(() {
           _allLowongan = lowonganData;
-          _filteredLowongan = lowonganData;
+          _filteredLowongan = _applyFilters(lowonganData);
           _isLoading = false;
         });
       } else {
@@ -82,21 +94,47 @@ class _LowonganScreenState extends State<LowonganScreen> {
     }
   }
 
+  List<String> _locationsOf(List<dynamic> items) {
+    final set = <String>{};
+    for (final item in items) {
+      final lokasi = (item['lokasi'] ?? '').toString().trim();
+      if (lokasi.isNotEmpty) set.add(lokasi);
+    }
+    final result = set.toList()..sort();
+    return result;
+  }
+
+  List<dynamic> _applyFilters([List<dynamic>? source]) {
+    final items = source ?? _allLowongan;
+    final query = _searchController.text.trim().toLowerCase();
+
+    return items.where((item) {
+      final posisi = (item['posisi'] ?? '').toString().toLowerCase();
+      final perusahaan = (item['perusahaan']?['nama_perusahaan'] ?? '')
+          .toString()
+          .toLowerCase();
+      final matchesSearch =
+          query.isEmpty ||
+          posisi.contains(query) ||
+          perusahaan.contains(query);
+      final matchesLokasi =
+          _selectedLokasi == null ||
+          (item['lokasi'] ?? '').toString().trim() == _selectedLokasi;
+      return matchesSearch && matchesLokasi;
+    }).toList();
+  }
+
   // ==================== FUNGSI FILTER SEARCH BAR ====================
   void _filterSearch(String query) {
     setState(() {
-      if (query.isEmpty) {
-        _filteredLowongan = _allLowongan;
-      } else {
-        _filteredLowongan = _allLowongan.where((item) {
-          final posisi = (item['posisi'] ?? '').toString().toLowerCase();
-          final perusahaan = (item['perusahaan']?['nama_perusahaan'] ?? '')
-              .toString()
-              .toLowerCase();
-          return posisi.contains(query.toLowerCase()) ||
-              perusahaan.contains(query.toLowerCase());
-        }).toList();
-      }
+      _filteredLowongan = _applyFilters();
+    });
+  }
+
+  void _selectLokasi(String? lokasi) {
+    setState(() {
+      _selectedLokasi = lokasi;
+      _filteredLowongan = _applyFilters();
     });
   }
 
@@ -203,6 +241,10 @@ class _LowonganScreenState extends State<LowonganScreen> {
                 ),
               ),
             ),
+            if (_locationsOf(_allLowongan).isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _buildLokasiFilter(),
+            ],
             const SizedBox(height: 20),
 
             // 3. Area Konten Utama List View
@@ -210,6 +252,185 @@ class _LowonganScreenState extends State<LowonganScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLokasiFilter() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return CompositedTransformTarget(
+            link: _lokasiLink,
+            child: SizedBox(
+              height: 44,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () => _toggleLokasiMenu(constraints.maxWidth),
+                  child: Ink(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3EDE6),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0xFF818080)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                          color: Color(0xFF4B2E2B),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedLokasi ?? 'Lokasi',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFC69C6D),
+                            ),
+                          ),
+                        ),
+                        AnimatedRotation(
+                          turns: _lokasiMenuOpen ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 22,
+                            color: Color(0xFF4B2E2B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _toggleLokasiMenu(double width) {
+    if (_lokasiMenuOpen) {
+      _closeLokasiMenu();
+    } else {
+      _openLokasiMenu(width);
+    }
+  }
+
+  void _openLokasiMenu(double width) {
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = OverlayEntry(
+      builder: (context) => _buildLokasiOverlay(width),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_lokasiOverlay!);
+    setState(() => _lokasiMenuOpen = true);
+  }
+
+  void _closeLokasiMenu() {
+    if (_lokasiOverlay == null && !_lokasiMenuOpen) return;
+    _lokasiOverlay?.remove();
+    _lokasiOverlay = null;
+    if (!mounted) {
+      _lokasiMenuOpen = false;
+      return;
+    }
+    setState(() => _lokasiMenuOpen = false);
+  }
+
+  Widget _buildLokasiOverlay(double width) {
+    final options = _locationsOf(_allLowongan);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _closeLokasiMenu,
+            child: const SizedBox.expand(),
+          ),
+        ),
+        CompositedTransformFollower(
+          link: _lokasiLink,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: const Offset(0, 6),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: width,
+              constraints: const BoxConstraints(maxHeight: 288),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3EDE6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF818080)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Material(
+                  color: const Color(0xFFF3EDE6),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length + 1,
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: const Color(0xFF818080).withValues(alpha: 0.2),
+                    ),
+                    itemBuilder: (context, index) {
+                      final String? value = index == 0
+                          ? null
+                          : options[index - 1];
+                      final String label =
+                          index == 0 ? 'Semua Lokasi' : options[index - 1];
+
+                      return InkWell(
+                        onTap: () {
+                          _selectLokasi(value);
+                          _closeLokasiMenu();
+                        },
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF4B2E2B),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

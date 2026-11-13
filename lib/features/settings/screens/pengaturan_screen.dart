@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/colors.dart';
-import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/network/api_config.dart';
 
@@ -16,8 +15,6 @@ class PengaturanScreen extends StatefulWidget {
 }
 
 class _PengaturanScreenState extends State<PengaturanScreen> {
-  final AuthService _authService = AuthService();
-
   // --- LOGIKA UTAMA LOGOUT ---
   Future<void> _performLogout() async {
     try {
@@ -600,10 +597,12 @@ class _UbahPasswordScreenState extends State<UbahPasswordScreen> {
                   ),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty)
+                  if (value == null || value.isEmpty) {
                     return "Password baru wajib diisi";
-                  if (value.length < 8)
+                  }
+                  if (value.length < 8) {
                     return "Password minimal berisi 8 karakter";
+                  }
                   return null;
                 },
               ),
@@ -638,10 +637,12 @@ class _UbahPasswordScreenState extends State<UbahPasswordScreen> {
                   ),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty)
+                  if (value == null || value.isEmpty) {
                     return "Konfirmasi password baru wajib diisi";
-                  if (value != _newPasswordController.text)
+                  }
+                  if (value != _newPasswordController.text) {
                     return "Konfirmasi password tidak cocok";
+                  }
                   return null;
                 },
               ),

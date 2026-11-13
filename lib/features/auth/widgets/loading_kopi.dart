@@ -110,8 +110,8 @@ class _LoadingKopiState extends State<LoadingKopi>
 
   // ── Skema warna berdasarkan [gelapBg] ──
   Color get _steamColor => widget.gelapBg
-      ? const Color(0xFFF3EDE6).withOpacity(0.40)
-      : const Color(0xFF4B2E2B).withOpacity(0.20);
+      ? const Color(0xFFF3EDE6).withValues(alpha: 0.40)
+      : const Color(0xFF4B2E2B).withValues(alpha: 0.20);
 
   Color get _strokeColor =>
       widget.gelapBg ? const Color(0xFFF3EDE6) : const Color(0xFF4B2E2B);
@@ -154,7 +154,7 @@ class _LoadingKopiState extends State<LoadingKopi>
                   children: List.generate(3, (i) {
                     return AnimatedBuilder(
                       animation: _steamControllers[i],
-                      builder: (_, __) {
+                      builder: (_, _) {
                         return Transform.translate(
                           offset: Offset(0, _steamY[i].value),
                           child: Opacity(
@@ -184,7 +184,7 @@ class _LoadingKopiState extends State<LoadingKopi>
                 bottom: 0,
                 child: AnimatedBuilder(
                   animation: _fillAnim,
-                  builder: (_, __) {
+                  builder: (_, _) {
                     return CustomPaint(
                       size: const Size(96, 96),
                       painter: _CoffeeCupPainter(
@@ -206,7 +206,7 @@ class _LoadingKopiState extends State<LoadingKopi>
         // ── Teks berkedip ──
         AnimatedBuilder(
           animation: _textOpacity,
-          builder: (_, __) {
+          builder: (_, _) {
             return Opacity(
               opacity: _textOpacity.value.clamp(0.0, 1.0),
               child: Text(
@@ -310,7 +310,7 @@ class _CoffeeCupPainter extends CustomPainter {
         height: 10, // ry*2
       ),
       Paint()
-        ..color = strokeColor.withOpacity(0.15)
+        ..color = strokeColor.withValues(alpha: 0.15)
         ..style = PaintingStyle.fill,
     );
 

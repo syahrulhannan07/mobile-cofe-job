@@ -171,9 +171,7 @@ class _StatusScreenState extends State<StatusScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const LoadingKopi(
-                      pesan: 'Menyeduh Status...',
-                      )
+                  ? const LoadingKopi(pesan: 'Menyeduh Status...')
                   : _errorMessage != null
                   ? _buildErrorState(_errorMessage!)
                   : dataTerpilih.isEmpty
@@ -198,25 +196,31 @@ class _StatusScreenState extends State<StatusScreen> {
 
                           // ─── LOGIKA LOGO PERUSAHAAN ───────────────────────
                           // Debug: cetak semua key yang ada di response item
-                          debugPrint("=== [Status] Item keys: ${item.keys.toList()} ===");
+                          debugPrint(
+                            "=== [Status] Item keys: ${item.keys.toList()} ===",
+                          );
                           debugPrint("=== [Status] Item data: $item ===");
 
                           // Coba semua kemungkinan field key logo dari backend
                           String? rawLogo =
-                              item['logo_kafe'] ??         // website pakai ini
-                              item['logo_perusahaan'] ??   // fallback 1
-                              item['logo'] ??              // fallback 2
-                              item['foto_kafe'] ??         // fallback 3
-                              item['foto_perusahaan'] ??   // fallback 4
+                              item['logo_kafe'] ?? // website pakai ini
+                              item['logo_perusahaan'] ?? // fallback 1
+                              item['logo'] ?? // fallback 2
+                              item['foto_kafe'] ?? // fallback 3
+                              item['foto_perusahaan'] ?? // fallback 4
                               item['perusahaan']?['logo_perusahaan'] ?? // nested
-                              item['kafe']?['logo_kafe'];  // nested fallback
+                              item['kafe']?['logo_kafe']; // nested fallback
 
-                          debugPrint("=== [Status] Raw logo value: $rawLogo ===");
+                          debugPrint(
+                            "=== [Status] Raw logo value: $rawLogo ===",
+                          );
 
                           String? finalLogoUrl;
-                          if (rawLogo != null && rawLogo.toString().isNotEmpty) {
+                          if (rawLogo != null &&
+                              rawLogo.toString().isNotEmpty) {
                             final String raw = rawLogo.toString();
-                            if (raw.startsWith('http://') || raw.startsWith('https://')) {
+                            if (raw.startsWith('http://') ||
+                                raw.startsWith('https://')) {
                               // Sudah URL lengkap — langsung pakai
                               finalLogoUrl = raw;
                             } else {
@@ -236,7 +240,9 @@ class _StatusScreenState extends State<StatusScreen> {
                             }
                           }
 
-                          debugPrint("=== [Status] Final logo URL: $finalLogoUrl ===");
+                          debugPrint(
+                            "=== [Status] Final logo URL: $finalLogoUrl ===",
+                          );
 
                           // ─── FORMAT TANGGAL (seperti website) ────────────
                           String rawTanggal =
@@ -248,15 +254,31 @@ class _StatusScreenState extends State<StatusScreen> {
                           if (rawTanggal.isNotEmpty) {
                             try {
                               final dt = DateTime.parse(rawTanggal).toLocal();
-                              const bulan = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                              displayTanggal = '${dt.day} ${bulan[dt.month]} ${dt.year}';
+                              const bulan = [
+                                '',
+                                'Januari',
+                                'Februari',
+                                'Maret',
+                                'April',
+                                'Mei',
+                                'Juni',
+                                'Juli',
+                                'Agustus',
+                                'September',
+                                'Oktober',
+                                'November',
+                                'Desember',
+                              ];
+                              displayTanggal =
+                                  '${dt.day} ${bulan[dt.month]} ${dt.year}';
                             } catch (_) {
                               displayTanggal = rawTanggal;
                             }
                           }
                           return _buildStatusCard(
                             context,
-                            jobTitle: item['posisi'] ?? 'Posisi Tidak Diketahui',
+                            jobTitle:
+                                item['posisi'] ?? 'Posisi Tidak Diketahui',
                             companyName:
                                 item['nama_kafe'] ??
                                 item['nama_perusahaan'] ??
@@ -462,16 +484,19 @@ class _StatusScreenState extends State<StatusScreen> {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: Colors.white.withValues(alpha: 0.6),
-                                  value: loadingProgress.expectedTotalBytes != null
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
                                       ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
+                                            loadingProgress.expectedTotalBytes!
                                       : null,
                                 ),
                               ),
                             );
                           },
                           errorBuilder: (c, e, s) {
-                            debugPrint("=== [Status] Logo gagal dimuat: $logoUrl — Error: $e ===");
+                            debugPrint(
+                              "=== [Status] Logo gagal dimuat: $logoUrl — Error: $e ===",
+                            );
                             return const Icon(
                               Icons.coffee,
                               color: Colors.white,
